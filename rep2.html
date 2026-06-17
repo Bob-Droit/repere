@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Repères IGN — Terrain</title>
+<title>RepÃ¨res IGN â€” Terrain</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -91,18 +91,18 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 </head>
 <body>
 
-<div class="tab-bar" style="margin:10px 10px 0">
-  <button class="tab active" onclick="showPage('cam')">Appareil</button>
-  <button class="tab" onclick="showPage('map')">Carte</button>
-  <button class="tab" onclick="showPage('gal')">Photos <span id="tab-gal-count" class="badge-count" style="display:none">0</span></button>
-  <button class="tab" onclick="showPage('folder')">Dossier</button>
+<div class="tab-bar" style="margin:10px 10px 0" id="tab-bar">
+  <button class="tab active" data-page="cam">Appareil</button>
+  <button class="tab" data-page="map">Carte</button>
+  <button class="tab" data-page="gal">Photos <span id="tab-gal-count" class="badge-count" style="display:none">0</span></button>
+  <button class="tab" data-page="folder">Dossier</button>
 </div>
 
 <div id="cam-page" class="page active">
   <div class="gps-bar">
     <div>
-      <div class="gps-label">Précision GPS</div>
-      <div class="gps-val" id="acc-txt">—</div>
+      <div class="gps-label">PrÃ©cision GPS</div>
+      <div class="gps-val" id="acc-txt">â€”</div>
     </div>
     <div style="flex:1;max-width:120px">
       <div class="precision-bar-wrap"><div class="precision-bar" id="prec-bar" style="width:0%"></div></div>
@@ -111,8 +111,8 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
   </div>
 
   <div class="coord-row">
-    <div class="coord-box"><span>Latitude</span><b id="lat-txt">—</b></div>
-    <div class="coord-box"><span>Longitude</span><b id="lng-txt">—</b></div>
+    <div class="coord-box"><span>Latitude</span><b id="lat-txt">â€”</b></div>
+    <div class="coord-box"><span>Longitude</span><b id="lng-txt">â€”</b></div>
   </div>
 
   <div id="nearby-alert" style="display:none" class="alert-box">
@@ -125,15 +125,15 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 
   <div class="video-wrap" id="video-wrap">
     <video id="video" autoplay playsinline muted></video>
-    <div class="overlay-badge" id="vid-badge">Appuyer sur Démarrer</div>
+    <div class="overlay-badge" id="vid-badge">Appuyer sur DÃ©marrer</div>
   </div>
 
   <div class="row" style="justify-content:center;gap:16px">
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" onclick="toggleCamera()" id="cam-toggle">Démarrer</button>
-    <button id="shutter" onclick="takePhoto()" disabled title="Prendre une photo">
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-toggle">DÃ©marrer</button>
+    <button id="shutter" disabled title="Prendre une photo">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2h-4l-1.5-2h-5L9 3z" fill-rule="evenodd"/></svg>
     </button>
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" onclick="switchCam()" id="cam-switch">Flip</button>
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-switch">Flip</button>
   </div>
   <canvas id="canvas" style="display:none"></canvas>
 </div>
@@ -143,7 +143,7 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 </div>
 
 <div id="gal-page" class="page">
-  <h2>Photos enregistrées (<span id="gal-count">0</span>)</h2>
+  <h2>Photos enregistrÃ©es (<span id="gal-count">0</span>)</h2>
   <div id="gallery"><div class="empty">Aucune photo encore.</div></div>
 </div>
 
@@ -157,17 +157,17 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
         <div class="folder-name" id="folder-name">Aucun dossier choisi</div>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="chooseFolder()">📁 Choisir / changer le dossier</button>
+    <button class="btn btn-primary" id="choose-folder-btn">ðŸ“ Choisir / changer le dossier</button>
   </div>
 
   <div class="info-box">
-    Choisis un dossier une seule fois (ex: <b>Pictures/ReperesIGN</b>). Chaque photo prise avec l'appareil sera automatiquement enregistrée dedans en <b>.jpg</b> avec ses coordonnées GPS écrites dans le fichier (EXIF). Tu peux ensuite ouvrir ce même dossier depuis ton PC pour récupérer les photos, ou y déposer manuellement d'anciennes photos qui ont déjà un GPS dans leurs métadonnées.
+    Choisis un dossier une seule fois (ex: <b>Pictures/ReperesIGN</b>). Chaque photo prise avec l'appareil sera automatiquement enregistrÃ©e dedans en <b>.jpg</b> avec ses coordonnÃ©es GPS Ã©crites dans le fichier (EXIF). Tu peux ensuite ouvrir ce mÃªme dossier depuis ton PC pour rÃ©cupÃ©rer les photos, ou y dÃ©poser manuellement d'anciennes photos qui ont dÃ©jÃ  un GPS dans leurs mÃ©tadonnÃ©es.
   </div>
 
-  <button class="btn btn-success" onclick="scanFolder()" id="scan-btn" disabled>🔍 Scanner le dossier (importer les nouvelles photos)</button>
+  <button class="btn btn-success" id="scan-btn" disabled>ðŸ” Scanner le dossier (importer les nouvelles photos)</button>
 
   <div class="warn-box">
-    Seules les photos contenant déjà des coordonnées GPS dans leurs métadonnées EXIF seront reconnues. Les photos sans GPS (capture d'écran, photo recadrée/modifiée, GPS désactivé à la prise) seront ignorées lors du scan.
+    Seules les photos contenant dÃ©jÃ  des coordonnÃ©es GPS dans leurs mÃ©tadonnÃ©es EXIF seront reconnues. Les photos sans GPS (capture d'Ã©cran, photo recadrÃ©e/modifiÃ©e, GPS dÃ©sactivÃ© Ã  la prise) seront ignorÃ©es lors du scan.
   </div>
 
   <div id="scan-result" style="display:none" class="scan-log"></div>
@@ -175,8 +175,8 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 
 <div class="toast" id="toast"></div>
 
-<div class="lightbox" id="lightbox" onclick="if(event.target===this)closeLightbox()">
-  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightbox-close">âœ•</button>
   <img id="lightbox-img" src="" alt="photo agrandie">
   <div class="lightbox-meta" id="lightbox-meta"></div>
 </div>
@@ -187,11 +187,9 @@ const DB_KEY = 'reperes_ign_photos_v2';
 let photos = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
 let pos = null, stream = null, facingMode = 'environment', map = null, watchId = null;
 let dirHandle = null;
-const FOLDER_DB_KEY = 'reperes_ign_folder_name';
 
 const NEARBY_RADIUS = 50;
 
-// ---------- Utilitaires géo ----------
 function haversine(a, b) {
   const R = 6371000, dLat = (b.lat-a.lat)*Math.PI/180, dLng = (b.lng-a.lng)*Math.PI/180;
   const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
@@ -206,14 +204,22 @@ function showToast(msg, color) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+// âœ… FIX PRINCIPAL : event n'est plus utilisÃ© globalement
 function showPage(p) {
   document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   document.getElementById(p+'-page').classList.add('active');
-  event.target.closest('.tab').classList.add('active');
+  const tab = document.querySelector(`.tab[data-page="${p}"]`);
+  if (tab) tab.classList.add('active');
   if (p === 'map') initMap();
   if (p === 'gal') renderGallery();
 }
+
+// Attacher les tabs via addEventListener (pas onclick inline)
+document.getElementById('tab-bar').addEventListener('click', function(e) {
+  const tab = e.target.closest('.tab');
+  if (tab) showPage(tab.dataset.page);
+});
 
 function persist() {
   localStorage.setItem(DB_KEY, JSON.stringify(photos));
@@ -226,7 +232,6 @@ function updateGalBadge() {
   else el.style.display='none';
 }
 
-// ---------- GPS live ----------
 function startGPS() {
   if (!navigator.geolocation) return;
   watchId = navigator.geolocation.watchPosition(onPos, err => {}, {
@@ -262,11 +267,11 @@ function checkNearby() {
   if (near.length) {
     const idsKey = near.map(p=>p.id).join(',');
     alert.style.display = 'flex';
-    document.getElementById('nearby-count').textContent = near.length + ' photo' + (near.length>1?'s':'') + ' déjà prise(s) ici !';
-    stripEl.innerHTML = near.map(ph => `<img class="nearby-thumb" src="${ph.thumb}" title="${ph.city||''}" onclick="openLightbox('${ph.id}')">`).join('');
+    document.getElementById('nearby-count').textContent = near.length + ' photo' + (near.length>1?'s':'') + ' dÃ©jÃ  prise(s) ici !';
+    stripEl.innerHTML = near.map(ph => `<img class="nearby-thumb" src="${ph.thumb}" title="${ph.city||''}" data-id="${ph.id}">`).join('');
     strip.style.display = 'block';
     if (idsKey !== lastAlertIds) {
-      showToast('⚠️ Alerte : ancienne(s) photo(s) à proximité !', 'var(--orange)');
+      showToast('âš ï¸ Alerte : ancienne(s) photo(s) Ã  proximitÃ© !', 'var(--orange)');
       lastAlertIds = idsKey;
     }
   } else {
@@ -276,24 +281,29 @@ function checkNearby() {
   }
 }
 
-// ---------- Caméra ----------
+// DÃ©lÃ©gation d'Ã©vÃ©nement pour la strip nearby
+document.getElementById('nearby-strip').addEventListener('click', function(e) {
+  const img = e.target.closest('.nearby-thumb');
+  if (img) openLightbox(img.dataset.id);
+});
+
 async function toggleCamera() {
   if (stream) {
     stream.getTracks().forEach(t => t.stop());
     stream = null;
-    document.getElementById('cam-toggle').textContent = 'Démarrer';
+    document.getElementById('cam-toggle').textContent = 'DÃ©marrer';
     document.getElementById('shutter').disabled = true;
-    document.getElementById('vid-badge').textContent = 'Appuyer sur Démarrer';
+    document.getElementById('vid-badge').textContent = 'Appuyer sur DÃ©marrer';
     return;
   }
   try {
     stream = await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1920},height:{ideal:1080}},audio:false});
     document.getElementById('video').srcObject = stream;
-    document.getElementById('cam-toggle').textContent = 'Arrêter';
+    document.getElementById('cam-toggle').textContent = 'ArrÃªter';
     document.getElementById('shutter').disabled = false;
-    document.getElementById('vid-badge').textContent = pos ? 'GPS OK' : 'Attente GPS…';
+    document.getElementById('vid-badge').textContent = pos ? 'GPS OK' : 'Attente GPSâ€¦';
   } catch(e) {
-    showToast('Caméra refusée', 'var(--red)');
+    showToast('CamÃ©ra refusÃ©e', 'var(--red)');
   }
 }
 
@@ -302,7 +312,16 @@ async function switchCam() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; await toggleCamera(); }
 }
 
-// ---------- EXIF GPS ----------
+document.getElementById('cam-toggle').addEventListener('click', toggleCamera);
+document.getElementById('cam-switch').addEventListener('click', switchCam);
+document.getElementById('shutter').addEventListener('click', takePhoto);
+document.getElementById('choose-folder-btn').addEventListener('click', chooseFolder);
+document.getElementById('scan-btn').addEventListener('click', scanFolder);
+document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', function(e) {
+  if (e.target === this) closeLightbox();
+});
+
 function buildGPSExifObj(lat, lng) {
   const gps = {};
   gps[piexif.GPSIFD.GPSVersionID] = [2,3,0,0];
@@ -362,7 +381,6 @@ function fileNameForPhoto(ts) {
   return `IMG_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`;
 }
 
-// ---------- Prise de photo ----------
 async function takePhoto() {
   if (!stream) return;
   const video = document.getElementById('video');
@@ -372,9 +390,7 @@ async function takePhoto() {
   canvas.getContext('2d').drawImage(video, 0, 0);
   let full = canvas.toDataURL('image/jpeg', 0.9);
 
-  if (pos) {
-    full = injectGPS(full, pos.lat, pos.lng);
-  }
+  if (pos) full = injectGPS(full, pos.lat, pos.lng);
 
   const thumb = makeThumb(video, video.videoWidth, video.videoHeight);
   const ts = new Date().toISOString();
@@ -382,32 +398,24 @@ async function takePhoto() {
 
   const photo = {
     id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-    ts,
-    lat: pos?.lat ?? null,
-    lng: pos?.lng ?? null,
-    acc: pos?.acc ?? null,
-    thumb, full,
-    fname,
-    source: 'app'
+    ts, lat: pos?.lat ?? null, lng: pos?.lng ?? null, acc: pos?.acc ?? null,
+    thumb, full, fname, source: 'app'
   };
 
-  // Sauvegarde locale immédiate (toujours, même sans dossier choisi)
   photos.unshift(photo);
   persist();
   checkNearby();
   if (map) addPhotoMarker(photo);
 
-  // Export disque si un dossier a été choisi
   if (dirHandle) {
     try {
       await writePhotoToFolder(fname, full);
-      showToast('📸 Photo enregistrée + exportée');
+      showToast('ðŸ“¸ Photo enregistrÃ©e + exportÃ©e');
     } catch(e) {
-      console.error(e);
-      showToast('Photo enregistrée (export fichier impossible)', 'var(--amber)');
+      showToast('Photo enregistrÃ©e (export fichier impossible)', 'var(--amber)');
     }
   } else {
-    showToast('📸 Photo enregistrée (pense à choisir un dossier d\'export)', 'var(--amber)');
+    showToast('ðŸ“¸ Photo enregistrÃ©e (pense Ã  choisir un dossier d\'export)', 'var(--amber)');
   }
 }
 
@@ -419,23 +427,22 @@ async function writePhotoToFolder(fname, dataUrlJpeg) {
   await writable.close();
 }
 
-// ---------- Gestion du dossier (File System Access API) ----------
 function supportsFSAccess() {
   return 'showDirectoryPicker' in window;
 }
 
 async function chooseFolder() {
   if (!supportsFSAccess()) {
-    showToast('Non supporté sur ce navigateur (utilise Chrome Android)', 'var(--red)');
+    showToast('Non supportÃ© sur ce navigateur (utilise Chrome Android)', 'var(--red)');
     return;
   }
   try {
     dirHandle = await window.showDirectoryPicker({mode:'readwrite'});
     await idbSaveHandle(dirHandle);
     updateFolderUI();
-    showToast('Dossier sélectionné ✓');
+    showToast('Dossier sÃ©lectionnÃ© âœ“');
   } catch(e) {
-    if (e.name !== 'AbortError') showToast('Sélection annulée', 'var(--muted)');
+    if (e.name !== 'AbortError') showToast('SÃ©lection annulÃ©e', 'var(--muted)');
   }
 }
 
@@ -454,7 +461,6 @@ function updateFolderUI() {
   }
 }
 
-// Persistance du handle de dossier via IndexedDB (localStorage ne peut pas stocker un FileSystemHandle)
 function idbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('reperes_ign_fs', 1);
@@ -492,25 +498,21 @@ async function restoreFolderHandle() {
       dirHandle = handle;
       updateFolderUI();
     } else {
-      // Permission à ré-accorder : on garde le handle, l'utilisateur devra cliquer "Scanner" ou "Choisir" pour ré-autoriser
       dirHandle = handle;
       updateFolderUI();
-      document.getElementById('folder-name').textContent = handle.name + ' (clique Scanner pour ré-autoriser)';
+      document.getElementById('folder-name').textContent = handle.name + ' (clique Scanner pour rÃ©-autoriser)';
       document.getElementById('folder-dot').style.background = 'var(--amber)';
     }
-  } catch(e) { console.warn('Restore handle échoué', e); }
+  } catch(e) { console.warn('Restore handle Ã©chouÃ©', e); }
 }
 
 async function ensurePermission() {
   if (!dirHandle) return false;
   let perm = await dirHandle.queryPermission({mode:'readwrite'});
-  if (perm !== 'granted') {
-    perm = await dirHandle.requestPermission({mode:'readwrite'});
-  }
+  if (perm !== 'granted') perm = await dirHandle.requestPermission({mode:'readwrite'});
   return perm === 'granted';
 }
 
-// ---------- Scan du dossier (import des nouvelles photos) ----------
 function blobToDataURL(blob) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -523,18 +525,17 @@ function blobToDataURL(blob) {
 async function scanFolder() {
   if (!dirHandle) return;
   const ok = await ensurePermission();
-  if (!ok) { showToast('Permission refusée pour le dossier', 'var(--red)'); return; }
+  if (!ok) { showToast('Permission refusÃ©e pour le dossier', 'var(--red)'); return; }
   updateFolderUI();
 
   const logEl = document.getElementById('scan-result');
   logEl.style.display = 'block';
-  let log = [];
-  log.push('Scan en cours…');
+  let log = ['Scan en coursâ€¦'];
   logEl.textContent = log.join('\n');
 
   const scanBtn = document.getElementById('scan-btn');
   scanBtn.disabled = true;
-  scanBtn.innerHTML = '<span class="spin"></span> Scan…';
+  scanBtn.innerHTML = '<span class="spin"></span> Scanâ€¦';
 
   const knownNames = new Set(photos.map(p => p.fname).filter(Boolean));
   let added = 0, skippedNoGps = 0, skippedKnown = 0, errors = 0, total = 0;
@@ -553,11 +554,10 @@ async function scanFolder() {
 
         if (!gps) {
           skippedNoGps++;
-          log.push(`✗ ${name} — pas de GPS, ignorée`);
+          log.push(`âœ— ${name} â€” pas de GPS, ignorÃ©e`);
           continue;
         }
 
-        // Génère une vignette via une image temporaire
         const thumb = await new Promise((resolve) => {
           const img = new Image();
           img.onload = () => resolve(makeThumb(img, img.naturalWidth, img.naturalHeight));
@@ -569,17 +569,15 @@ async function scanFolder() {
           id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
           ts: file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString(),
           lat: gps.lat, lng: gps.lng, acc: null,
-          thumb, full: dataUrl,
-          fname: name,
-          source: 'import'
+          thumb, full: dataUrl, fname: name, source: 'import'
         };
         photos.unshift(photo);
         knownNames.add(name);
         added++;
-        log.push(`✓ ${name} — importée (${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)})`);
+        log.push(`âœ“ ${name} â€” importÃ©e (${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)})`);
       } catch(e) {
         errors++;
-        log.push(`⚠ ${name} — erreur lecture: ${e.message}`);
+        log.push(`âš  ${name} â€” erreur lecture: ${e.message}`);
       }
       logEl.textContent = log.join('\n');
       logEl.scrollTop = logEl.scrollHeight;
@@ -592,36 +590,43 @@ async function scanFolder() {
   checkNearby();
   if (map) { map.remove(); map = null; initMap(); }
 
-  log.push('—');
-  log.push(`Terminé : ${added} importée(s), ${skippedNoGps} sans GPS ignorée(s), ${skippedKnown} déjà connue(s), ${errors} erreur(s) sur ${total} fichier(s) jpg.`);
+  log.push('â€”');
+  log.push(`TerminÃ© : ${added} importÃ©e(s), ${skippedNoGps} sans GPS ignorÃ©e(s), ${skippedKnown} dÃ©jÃ  connue(s), ${errors} erreur(s) sur ${total} fichier(s) jpg.`);
   logEl.textContent = log.join('\n');
   logEl.scrollTop = logEl.scrollHeight;
 
   scanBtn.disabled = false;
-  scanBtn.innerHTML = '🔍 Scanner le dossier (importer les nouvelles photos)';
+  scanBtn.innerHTML = 'ðŸ” Scanner le dossier (importer les nouvelles photos)';
 
-  if (added > 0) showToast(`${added} photo(s) importée(s) !`);
-  else showToast('Aucune nouvelle photo avec GPS trouvée', 'var(--amber)');
+  if (added > 0) showToast(`${added} photo(s) importÃ©e(s) !`);
+  else showToast('Aucune nouvelle photo avec GPS trouvÃ©e', 'var(--amber)');
 }
 
-// ---------- Galerie ----------
 function renderGallery() {
   document.getElementById('gal-count').textContent = photos.length;
   const gal = document.getElementById('gallery');
   if (!photos.length) { gal.innerHTML = '<div class="empty">Aucune photo encore.</div>'; return; }
   gal.innerHTML = photos.map(ph => `
     <div class="gal-item">
-      <img src="${ph.thumb}" alt="photo" onclick="openLightbox('${ph.id}')">
+      <img src="${ph.thumb}" alt="photo" data-id="${ph.id}" class="gal-thumb">
       <div class="gal-meta">
         <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
-        <p>Lat ${ph.lat!=null?ph.lat.toFixed(6):'—'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'—'}</p>
-        <p>Précision : ${ph.acc ? Math.round(ph.acc)+' m' : '—'}</p>
-        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importée':'Prise dans l\\'app'}</span>
+        <p>Lat ${ph.lat!=null?ph.lat.toFixed(6):'â€”'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'â€”'}</p>
+        <p>PrÃ©cision : ${ph.acc ? Math.round(ph.acc)+' m' : 'â€”'}</p>
+        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'ImportÃ©e':'Prise dans l\'app'}</span>
       </div>
-      <button onclick="deletePhoto('${ph.id}')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">✕</button>
+      <button class="del-btn" data-id="${ph.id}" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">âœ•</button>
     </div>
   `).join('');
 }
+
+// DÃ©lÃ©gation d'Ã©vÃ©nements pour la galerie
+document.getElementById('gallery').addEventListener('click', function(e) {
+  const thumb = e.target.closest('.gal-thumb');
+  const del = e.target.closest('.del-btn');
+  if (thumb) openLightbox(thumb.dataset.id);
+  if (del) deletePhoto(del.dataset.id);
+});
 
 function deletePhoto(id) {
   photos = photos.filter(p => p.id !== id);
@@ -637,7 +642,7 @@ function openLightbox(id) {
   document.getElementById('lightbox-img').src = ph.full || ph.thumb;
   document.getElementById('lightbox-meta').innerHTML = `
     <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
-    Lat ${ph.lat!=null?ph.lat.toFixed(6):'—'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'—'}
+    Lat ${ph.lat!=null?ph.lat.toFixed(6):'â€”'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'â€”'}
   `;
   document.getElementById('lightbox').classList.add('show');
 }
@@ -645,14 +650,13 @@ function closeLightbox() {
   document.getElementById('lightbox').classList.remove('show');
 }
 
-// ---------- Carte ----------
 let userMarker = null, userCircle = null;
 
 function initMap() {
   if (map) return;
   map = L.map('map', {zoomControl:true}).setView([46.5, 2.3], 6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'© OpenStreetMap',maxZoom:19
+    attribution:'Â© OpenStreetMap',maxZoom:19
   }).addTo(map);
   photos.forEach(addPhotoMarker);
   if (pos) updateMapPos();
@@ -665,8 +669,14 @@ function addPhotoMarker(ph) {
     className:'', iconSize:[44,44], iconAnchor:[22,22]
   });
   L.marker([ph.lat,ph.lng],{icon}).addTo(map)
-    .bindPopup(`<img src="${ph.thumb}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="openLightbox('${ph.id}')"><br><small>${new Date(ph.ts).toLocaleString('fr-FR')}</small>`);
+    .bindPopup(`<img src="${ph.thumb}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" data-id="${ph.id}" class="map-popup-img"><br><small>${new Date(ph.ts).toLocaleString('fr-FR')}</small>`);
 }
+
+// DÃ©lÃ©gation pour les popups de la carte
+document.getElementById('map').addEventListener('click', function(e) {
+  const img = e.target.closest('.map-popup-img');
+  if (img) openLightbox(img.dataset.id);
+});
 
 function updateMapPos() {
   if (!map || !pos) return;
@@ -681,7 +691,6 @@ function updateMapPos() {
   }
 }
 
-// ---------- Démarrage ----------
 updateGalBadge();
 startGPS();
 restoreFolderHandle();
