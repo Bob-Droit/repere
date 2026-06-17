@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Repères IGN — Terrain</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0f172a;--surface:#1e293b;--surface2:#334155;
+  --text:#f1f5f9;--muted:#94a3b8;--accent:#3b82f6;
+  --green:#22c55e;--amber:#f59e0b;--red:#ef4444;--orange:#f97316;
+  --radius:12px;--gap:12px
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden}
+#map{flex:1;min-height:280px;z-index:1}
+.panel{background:var(--surface);border-top:1px solid var(--surface2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;align-items:center}
+.gps-bar{background:var(--surface2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gps-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.gps-val{font-size:14px;font-weight:600}
+.precision-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.precision-bar-wrap{flex:1;height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
+.precision-bar{height:100%;border-radius:3px;transition:width .4s,background .4s}
+.btn{flex:1;border:none;border-radius:var(--radius);padding:14px 10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-danger{background:var(--red);color:#fff}
+.btn-neutral{background:var(--surface2);color:var(--text)}
+.btn:disabled{opacity:.4;pointer-events:none}
+#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s}
+#shutter:active{transform:scale(.9)}
+#shutter svg{width:28px;height:28px;fill:#fff}
+.video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:4/3}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px)}
+.nearby-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0}
+.nearby-strip::-webkit-scrollbar{display:none}
+.nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange)}
+.alert-box{background:rgba(249,115,22,.15);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--orange);font-weight:600;display:flex;align-items:center;gap:8px}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;white-space:nowrap}
+.toast.show{opacity:1}
+#gallery{display:flex;flex-direction:column;gap:10px}
+.gal-item{background:var(--surface2);border-radius:var(--radius);overflow:hidden;display:flex;gap:12px;align-items:center;padding:10px}
+.gal-item img{width:70px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.gal-meta{flex:1;min-width:0}
+.gal-meta p{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gal-meta b{font-size:13px}
+.tab-bar{display:flex;background:var(--surface2);border-radius:var(--radius);overflow:hidden;margin-bottom:4px}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none}
+.tab.active{background:var(--accent);color:#fff}
+.page{display:none}
+.page.active{display:flex;flex-direction:column;gap:10px}
+#map-page{display:none;flex:1;flex-direction:column}
+#map-page.active{display:flex}
+#cam-page.active,#gal-page.active{padding:14px;padding-top:10px;overflow-y:auto;flex:1}
+h2{font-size:16px;font-weight:600;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
+.coord-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.coord-box{background:var(--surface2);border-radius:8px;padding:8px 12px}
+.coord-box span{font-size:11px;color:var(--muted);display:block}
+.coord-box b{font-size:13px;font-family:monospace}
+</style>
+</head>
+<body>
+
+<div class="tab-bar" style="margin:10px 10px 0">
+  <button class="tab active" onclick="showPage('cam')">Appareil</button>
+  <button class="tab" onclick="showPage('map')">Carte</button>
+  <button class="tab" onclick="showPage('gal')">Photos</button>
+</div>
+
+<div id="cam-page" class="page active">
+  <div class="gps-bar">
+    <div>
+      <div class="gps-label">Précision GPS</div>
+      <div class="gps-val" id="acc-txt">—</div>
+    </div>
+    <div style="flex:1;max-width:120px">
+      <div class="precision-bar-wrap"><div class="precision-bar" id="prec-bar" style="width:0%"></div></div>
+    </div>
+    <div class="precision-dot" id="prec-dot" style="background:var(--muted)"></div>
+  </div>
+
+  <div class="coord-row">
+    <div class="coord-box"><span>Latitude</span><b id="lat-txt">—</b></div>
+    <div class="coord-box"><span>Longitude</span><b id="lng-txt">—</b></div>
+  </div>
+
+  <div id="nearby-alert" style="display:none" class="alert-box">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+    <span id="nearby-count">Photos dans les parages !</span>
+  </div>
+  <div id="nearby-strip-wrap" style="display:none">
+    <div class="nearby-strip" id="nearby-strip"></div>
+  </div>
+
+  <div class="video-wrap" id="video-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="overlay-badge" id="vid-badge">Appuyer sur Démarrer</div>
+  </div>
+
+  <div class="row" style="justify-content:center;gap:16px">
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" onclick="toggleCamera()" id="cam-toggle">Démarrer</button>
+    <button id="shutter" onclick="takePhoto()" disabled title="Prendre une photo">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2h-4l-1.5-2h-5L9 3z" fill-rule="evenodd"/></svg>
+    </button>
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" onclick="switchCam()" id="cam-switch">Flip</button>
+  </div>
+  <canvas id="canvas" style="display:none"></canvas>
+</div>
+
+<div id="map-page" class="page">
+  <div id="map"></div>
+</div>
+
+<div id="gal-page" class="page">
+  <h2>Photos enregistrées (<span id="gal-count">0</span>)</h2>
+  <div id="gallery"><div class="empty">Aucune photo encore.</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DB_KEY = 'reperes_ign_photos';
+let photos = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+let pos = null, stream = null, facingMode = 'environment', map = null, watchId = null;
+
+const NEARBY_RADIUS = 50;
+
+function haversine(a, b) {
+  const R = 6371000, dLat = (b.lat-a.lat)*Math.PI/180, dLng = (b.lng-a.lng)*Math.PI/180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function showToast(msg, color) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = color || 'var(--green)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function showPage(p) {
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.getElementById(p+'-page').classList.add('active');
+  event.target.classList.add('active');
+  if (p === 'map') initMap();
+  if (p === 'gal') renderGallery();
+}
+
+function startGPS() {
+  if (!navigator.geolocation) return;
+  watchId = navigator.geolocation.watchPosition(onPos, err => {}, {
+    enableHighAccuracy: true, maximumAge: 2000, timeout: 10000
+  });
+}
+
+function onPos(p) {
+  pos = {lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy};
+  const acc = Math.round(pos.acc);
+  document.getElementById('acc-txt').textContent = acc + ' m';
+  document.getElementById('lat-txt').textContent = pos.lat.toFixed(6);
+  document.getElementById('lng-txt').textContent = pos.lng.toFixed(6);
+  let pct, color;
+  if (acc <= 5) { pct=100; color='var(--green)'; }
+  else if (acc <= 15) { pct=70; color='var(--green)'; }
+  else if (acc <= 30) { pct=45; color='var(--amber)'; }
+  else { pct=15; color='var(--red)'; }
+  document.getElementById('prec-bar').style.width = pct+'%';
+  document.getElementById('prec-bar').style.background = color;
+  document.getElementById('prec-dot').style.background = color;
+  checkNearby();
+  if (map) updateMapPos();
+}
+
+function checkNearby() {
+  if (!pos) return;
+  const near = photos.filter(ph => haversine(pos, {lat:ph.lat,lng:ph.lng}) <= NEARBY_RADIUS);
+  const alert = document.getElementById('nearby-alert');
+  const strip = document.getElementById('nearby-strip-wrap');
+  const stripEl = document.getElementById('nearby-strip');
+  if (near.length) {
+    alert.style.display = 'flex';
+    document.getElementById('nearby-count').textContent = near.length + ' photo' + (near.length>1?'s':'') + ' dans les parages !';
+    stripEl.innerHTML = near.map(ph => `<img class="nearby-thumb" src="${ph.thumb}" title="${ph.city||''}">`).join('');
+    strip.style.display = 'block';
+  } else {
+    alert.style.display = 'none';
+    strip.style.display = 'none';
+  }
+}
+
+async function toggleCamera() {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    document.getElementById('cam-toggle').textContent = 'Démarrer';
+    document.getElementById('shutter').disabled = true;
+    document.getElementById('vid-badge').textContent = 'Appuyer sur Démarrer';
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1920},height:{ideal:1080}},audio:false});
+    document.getElementById('video').srcObject = stream;
+    document.getElementById('cam-toggle').textContent = 'Arrêter';
+    document.getElementById('shutter').disabled = false;
+    document.getElementById('vid-badge').textContent = pos ? 'GPS OK' : 'Attente GPS…';
+  } catch(e) {
+    showToast('Caméra refusée', 'var(--red)');
+  }
+}
+
+async function switchCam() {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; await toggleCamera(); }
+}
+
+function takePhoto() {
+  if (!stream) return;
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const full = canvas.toDataURL('image/jpeg', 0.9);
+  const thumb = (() => {
+    const c2 = document.createElement('canvas');
+    c2.width = 200; c2.height = 200;
+    const ctx = c2.getContext('2d');
+    const s = Math.min(video.videoWidth, video.videoHeight);
+    const ox = (video.videoWidth-s)/2, oy = (video.videoHeight-s)/2;
+    ctx.drawImage(video, ox, oy, s, s, 0, 0, 200, 200);
+    return c2.toDataURL('image/jpeg', 0.7);
+  })();
+  const photo = {
+    id: Date.now(),
+    ts: new Date().toISOString(),
+    lat: pos?.lat || null,
+    lng: pos?.lng || null,
+    acc: pos?.acc || null,
+    thumb, full
+  };
+  photos.unshift(photo);
+  localStorage.setItem(DB_KEY, JSON.stringify(photos));
+  showToast('Photo enregistrée !');
+  checkNearby();
+  if (map) addPhotoMarker(photo);
+}
+
+function renderGallery() {
+  document.getElementById('gal-count').textContent = photos.length;
+  const gal = document.getElementById('gallery');
+  if (!photos.length) { gal.innerHTML = '<div class="empty">Aucune photo encore.</div>'; return; }
+  gal.innerHTML = photos.map(ph => `
+    <div class="gal-item">
+      <img src="${ph.thumb}" alt="photo">
+      <div class="gal-meta">
+        <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
+        <p>Lat ${ph.lat?.toFixed(6)||'—'} / Lng ${ph.lng?.toFixed(6)||'—'}</p>
+        <p>Précision : ${ph.acc ? Math.round(ph.acc)+' m' : '—'}</p>
+      </div>
+      <button onclick="deletePhoto(${ph.id})" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">✕</button>
+    </div>
+  `).join('');
+}
+
+function deletePhoto(id) {
+  photos = photos.filter(p => p.id !== id);
+  localStorage.setItem(DB_KEY, JSON.stringify(photos));
+  renderGallery();
+  checkNearby();
+  if (map) { map.remove(); map = null; initMap(); }
+}
+
+let userMarker = null, userCircle = null;
+
+function initMap() {
+  if (map) return;
+  map = L.map('map', {zoomControl:true}).setView([46.5, 2.3], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap',maxZoom:19
+  }).addTo(map);
+  photos.forEach(addPhotoMarker);
+  if (pos) updateMapPos();
+}
+
+function addPhotoMarker(ph) {
+  if (!ph.lat || !ph.lng || !map) return;
+  const icon = L.divIcon({
+    html: `<img src="${ph.thumb}" style="width:44px;height:44px;border-radius:50%;border:3px solid var(--accent);object-fit:cover">`,
+    className:'', iconSize:[44,44], iconAnchor:[22,22]
+  });
+  L.marker([ph.lat,ph.lng],{icon}).addTo(map)
+    .bindPopup(`<img src="${ph.thumb}" style="width:120px;height:120px;object-fit:cover;border-radius:8px"><br><small>${new Date(ph.ts).toLocaleString('fr-FR')}</small>`);
+}
+
+function updateMapPos() {
+  if (!map || !pos) return;
+  if (!userMarker) {
+    userMarker = L.circleMarker([pos.lat,pos.lng],{radius:8,color:'#fff',fillColor:var_accent(),fillOpacity:1,weight:2}).addTo(map);
+    userCircle = L.circle([pos.lat,pos.lng],{radius:pos.acc,color:var_accent(),fillColor:var_accent(),fillOpacity:.1,weight:1}).addTo(map);
+    map.setView([pos.lat,pos.lng], 17);
+  } else {
+    userMarker.setLatLng([pos.lat,pos.lng]);
+    userCircle.setLatLng([pos.lat,pos.lng]);
+    userCircle.setRadius(pos.acc);
+  }
+}
+
+function var_accent() { return '#3b82f6'; }
+
+startGPS();
+</script>
+</body>
+</html>
