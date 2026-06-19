@@ -181,6 +181,7 @@ let photos = [];
 let pos = null, stream = null, facingMode = 'environment';
 let map = null, clusterGroup = null, userMarker = null, userCircle = null;
 let dirHandle = null;
+let lightboxUrl = null;
 const NEARBY_R = 50;
 
 function idbOpen() {
@@ -402,28 +403,29 @@ async function takePhoto() {
   const video=document.getElementById('video'), canvas=document.getElementById('canvas');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   canvas.getContext('2d').drawImage(video,0,0);
-  let full=canvas.toDataURL('image/jpeg',0.9);
-  if (pos) full=injectGPS(full,pos.lat,pos.lng);
+  let fullDataUrl=canvas.toDataURL('image/jpeg',0.9);
+  if (pos) fullDataUrl=injectGPS(fullDataUrl,pos.lat,pos.lng);
+  const fullBlob=dataUrlToBlob(fullDataUrl);
   const thumb=makeThumb(video,video.videoWidth,video.videoHeight);
   const ts=new Date().toISOString(), fname=fileNameFor(ts);
   const photo={
     id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
     ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
-    thumb, full, fname, source:'app'
+    thumb, full:fullBlob, fname, source:'app'
   };
   photos.unshift(photo);
   await dbPut(photo);
   updateGalBadge(); checkNearby();
   if (clusterGroup) addPhotoMarker(photo);
   if (dirHandle) {
-    try { await writePhotoToFolder(fname,full); showToast('Photo enregistree + exportee'); }
+    try { await writePhotoToFolder(fname,fullBlob); showToast('Photo enregistree + exportee'); }
     catch(e){ showToast('Photo enregistree (export impossible)','var(--amber)'); }
   } else showToast('Photo enregistree','var(--amber)');
 }
 
-async function writePhotoToFolder(fname,dataUrl) {
+async function writePhotoToFolder(fname,blob) {
   const fh=await dirHandle.getFileHandle(fname,{create:true}), w=await fh.createWritable();
-  await w.write(dataUrlToBlob(dataUrl)); await w.close();
+  await w.write(blob); await w.close();
 }
 
 function supportsFSA(){ return 'showDirectoryPicker' in window; }
@@ -455,6 +457,7 @@ async function restoreFolderHandle() {
     const perm=await h.queryPermission({mode:'readwrite'});
     if (perm==='granted') {
       updateFolderUI();
+      showToast(photos.length+' photo(s) chargee(s) depuis la memoire');
     } else {
       document.getElementById('folder-dot').style.background='var(--amber)';
       document.getElementById('folder-name').textContent=h.name+' (Scanner pour reautoriser)';
@@ -485,7 +488,7 @@ async function scanFolder() {
   scanBtn.disabled=true; scanBtn.innerHTML='<span class="spin"></span> Scan...';
   const knownNames=new Set(photos.map(p=>p.fname).filter(Boolean));
   let added=0,skippedNoGps=0,skippedKnown=0,errors=0,total=0;
-  const log=['Scan en cours...'];
+  const log=['Scan en cours... ('+knownNames.size+' deja en memoire, non reimportees)'];
   logEl.textContent=log[0];
   try {
     for await (const [name,handle] of dirHandle.entries()) {
@@ -500,14 +503,14 @@ async function scanFolder() {
         const thumb=await new Promise(res=>{
           const img=new Image();
           img.onload=()=>res(makeThumb(img,img.naturalWidth,img.naturalHeight));
-          img.onerror=()=>res(dataUrl);
+          img.onerror=()=>res(thumb);
           img.src=dataUrl;
         });
         const photo={
           id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
           ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
           lat:gps.lat,lng:gps.lng,acc:null,
-          thumb, full:dataUrl, fname:name, source:'import'
+          thumb, full:file, fname:name, source:'import'
         };
         photos.unshift(photo);
         await dbPut(photo);
@@ -520,7 +523,7 @@ async function scanFolder() {
     }
   } catch(e){log.push('Erreur: '+e.message);}
   updateGalBadge(); checkNearby();
-  log.push('---\nTermine : '+added+' importee(s), '+skippedNoGps+' sans GPS, '+skippedKnown+' deja connue(s), '+errors+' erreur(s) / '+total+' jpg.');
+  log.push('---\nTermine : '+added+' importee(s), '+skippedNoGps+' sans GPS, '+skippedKnown+' deja en memoire (non reimportees), '+errors+' erreur(s) / '+total+' jpg.');
   logEl.textContent=log.join('\n'); logEl.scrollTop=logEl.scrollHeight;
   scanBtn.disabled=false; scanBtn.innerHTML='Scanner le dossier (importer nouvelles photos)';
   showToast(added>0?added+' photo(s) importee(s) !':'Aucune nouvelle photo GPS', added>0?undefined:'var(--amber)');
@@ -558,16 +561,25 @@ async function deletePhoto(id) {
   if (map){map.remove();map=null;clusterGroup=null;userMarker=null;userCircle=null;initMap();}
 }
 
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+  if (lightboxUrl){URL.revokeObjectURL(lightboxUrl);lightboxUrl=null;}
+}
+
 async function openLightbox(id) {
   const ph=await dbGet(id);
   if (!ph) return;
-  document.getElementById('lightbox-img').src=ph.full||ph.thumb;
+  if (lightboxUrl){URL.revokeObjectURL(lightboxUrl);lightboxUrl=null;}
+  let src=ph.thumb;
+  if (ph.full instanceof Blob){lightboxUrl=URL.createObjectURL(ph.full);src=lightboxUrl;}
+  else if (typeof ph.full==='string'&&ph.full) src=ph.full;
+  document.getElementById('lightbox-img').src=src;
   document.getElementById('lightbox-meta').innerHTML='<b>'+new Date(ph.ts).toLocaleString('fr-FR')+'</b> Lat '+(ph.lat!=null?ph.lat.toFixed(6):'-')+' / Lng '+(ph.lng!=null?ph.lng.toFixed(6):'-');
   document.getElementById('lightbox').classList.add('show');
 }
 
-document.getElementById('lightbox-close').addEventListener('click',()=>document.getElementById('lightbox').classList.remove('show'));
-document.getElementById('lightbox').addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+document.getElementById('lightbox-close').addEventListener('click',closeLightbox);
+document.getElementById('lightbox').addEventListener('click',function(e){if(e.target===this)closeLightbox();});
 
 function initMap() {
   if (map) return;
@@ -607,6 +619,7 @@ function updateMapPos() {
 }
 
 async function init() {
+  if (navigator.storage?.persist) { try{await navigator.storage.persist();}catch(e){} }
   photos=await dbAll();
   photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   updateGalBadge(); checkNearby(); startGPS();
