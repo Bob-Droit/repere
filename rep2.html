@@ -8,9 +8,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Reperes IGN - Terrain</title>
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -87,6 +89,14 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 .lightbox-meta b{display:block;font-size:15px;margin-bottom:4px}
 .lightbox-close{position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .badge-count{background:var(--orange);color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;margin-left:4px}
+.landmark-bar{background:var(--surface2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid transparent}
+.landmark-bar.active{border-color:#14b8a6;background:rgba(20,184,166,.12)}
+.landmark-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.landmark-num{font-size:14px;font-weight:700;color:#5eead4}
+.landmark-sub{font-size:11px;color:var(--muted)}
+.landmark-btn{flex-shrink:0;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#0d9488;color:#fff;white-space:nowrap}
+.landmark-btn:active{transform:scale(.96)}
+.rep-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;background:rgba(20,184,166,.2);color:#5eead4;margin-left:4px}
 </style>
 </head>
 <body>
@@ -99,6 +109,13 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 </div>
 
 <div id="cam-page" class="page active">
+  <div class="landmark-bar" id="landmark-bar">
+    <div class="landmark-info">
+      <div class="landmark-num" id="landmark-num">Aucun repère actif</div>
+      <div class="landmark-sub" id="landmark-sub">Appuie sur "Nouveau Repère" avant de photographier un point</div>
+    </div>
+    <button class="landmark-btn" id="landmark-btn">📍 Nouveau Repère</button>
+  </div>
   <div class="gps-bar">
     <div>
       <div class="gps-label">Precision GPS</div>
@@ -177,22 +194,34 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 const IDB_NAME = 'reperes_ign_v3';
 const IDB_PHOTOS = 'photos';
 const IDB_FS = 'handles';
+const IDB_META = 'meta';
 let photos = [];
 let pos = null, stream = null, facingMode = 'environment', map = null;
 let dirHandle = null;
+let landmark = null; // {id, num, startedAt}
 const NEARBY_RADIUS = 50;
+const EXIF_PREFIX_BYTES = 1024*1024; // 1 Mo : largement suffisant pour lire les segments EXIF/GPS (limite JPEG = 64 Ko/segment) sans decoder toute la photo -> scan d'import beaucoup plus rapide
+let markersById = new Map(); // id photo -> marqueur Leaflet, pour MAJ incrementale de la carte (pas de rechargement complet)
 
+let _dbPromise = null;
 function idbOpen() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(IDB_NAME, 1);
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 2);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(IDB_PHOTOS)) db.createObjectStore(IDB_PHOTOS, {keyPath:'id'});
       if (!db.objectStoreNames.contains(IDB_FS)) db.createObjectStore(IDB_FS);
+      if (!db.objectStoreNames.contains(IDB_META)) db.createObjectStore(IDB_META);
     };
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = e => rej(e.target.error);
+    req.onsuccess = e => {
+      const db = e.target.result;
+      db.onclose = () => { _dbPromise = null; }; // reconnexion propre si la connexion se ferme
+      res(db);
+    };
+    req.onerror = e => { _dbPromise = null; rej(e.target.error); };
   });
+  return _dbPromise;
 }
 
 async function dbGetAll() {
@@ -254,6 +283,76 @@ async function idbLoadHandle() {
     req.onerror = e => rej(e.target.error);
   });
 }
+
+async function idbSaveMeta(key, value) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_META, 'readwrite');
+    tx.objectStore(IDB_META).put(value, key);
+    tx.oncomplete = res;
+    tx.onerror = e => rej(e.target.error);
+  });
+}
+
+async function idbLoadMeta(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_META, 'readonly');
+    const req = tx.objectStore(IDB_META).get(key);
+    req.onsuccess = e => res(e.target.result !== undefined ? e.target.result : null);
+    req.onerror = e => rej(e.target.error);
+  });
+}
+
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // repli simple, toujours unique au sein de l'appareil/session
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+// ---- Systeme "Nouveau Repere" ----
+// Chaque repere a un UUID genere localement et jamais reutilise : meme si
+// l'appli crashe ou redemarre, le compteur affiche (num) peut etre relu
+// depuis IndexedDB mais c'est TOUJOURS l'UUID, jamais le numero, qui sert
+// a regrouper les photos cote Python. Un bug de numerotation (ex: 1,2,3 puis
+// crash puis a nouveau 1,2) ne peut donc jamais faire croire a tort que deux
+// reperes differents sont identiques.
+async function initLandmark() {
+  const saved = await idbLoadMeta('currentLandmark');
+  const counter = await idbLoadMeta('landmarkCounter');
+  landmark = saved || null;
+  window._landmarkCounter = counter || 0;
+  updateLandmarkUI();
+}
+
+async function newLandmark() {
+  window._landmarkCounter = (window._landmarkCounter || 0) + 1;
+  landmark = {id: uuid(), num: window._landmarkCounter, startedAt: new Date().toISOString()};
+  await idbSaveMeta('currentLandmark', landmark);
+  await idbSaveMeta('landmarkCounter', window._landmarkCounter);
+  updateLandmarkUI();
+  showToast('Repère #'+landmark.num+' démarré', '#0d9488');
+}
+
+function updateLandmarkUI() {
+  const bar = document.getElementById('landmark-bar');
+  const numEl = document.getElementById('landmark-num');
+  const subEl = document.getElementById('landmark-sub');
+  if (landmark) {
+    bar.classList.add('active');
+    numEl.textContent = '🏷️ Repère #' + landmark.num + ' actif';
+    subEl.textContent = 'Toutes les photos suivantes seront rattachées à ce repère';
+  } else {
+    bar.classList.remove('active');
+    numEl.textContent = 'Aucun repère actif';
+    subEl.textContent = 'Appuie sur "Nouveau Repère" avant de photographier un point';
+  }
+}
+
+document.getElementById('landmark-btn').addEventListener('click', newLandmark);
 
 function haversine(a, b) {
   const R = 6371000, dLat = (b.lat-a.lat)*Math.PI/180, dLng = (b.lng-a.lng)*Math.PI/180;
@@ -376,23 +475,60 @@ function buildGPSExif(lat, lng) {
   return gps;
 }
 
+// Encode le repere actif dans le tag EXIF ImageDescription, sous la forme
+// "REPERE_ID:<uuid>;REPERE_NUM:<num>". C'est la source la plus fiable car
+// elle voyage avec le fichier meme s'il est renomme/deplace/copie - contrairement
+// au nom de fichier que le trieur Python reecrit de toute facon.
 function injectGPS(dataUrl, lat, lng) {
   try {
-    const exifObj={'0th':{},'Exif':{},'GPS':buildGPSExif(lat,lng)};
+    const zeroth={};
+    if (landmark) zeroth[piexif.ImageIFD.ImageDescription] = 'REPERE_ID:'+landmark.id+';REPERE_NUM:'+landmark.num;
+    const exifObj={'0th':zeroth,'Exif':{},'GPS':buildGPSExif(lat,lng)};
     return piexif.insert(piexif.dump(exifObj), dataUrl);
   } catch(e){ return dataUrl; }
 }
 
-function extractGPS(dataUrl) {
+// Lit uniquement le debut du fichier (EXIF_PREFIX_BYTES) pour parser l'EXIF :
+// un segment EXIF JPEG fait au maximum 64 Ko, donc 1 Mo est tres large.
+// Cela evite de transformer toute la photo (plusieurs Mo) en chaine binaire.
+function bufferToBinaryString(buf) {
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  let result = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    result += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return result;
+}
+
+async function readExifFromFile(file) {
   try {
-    const exifObj=piexif.load(dataUrl);
-    const gps=exifObj.GPS;
+    const head = file.slice(0, Math.min(EXIF_PREFIX_BYTES, file.size));
+    const buf = await head.arrayBuffer();
+    const binStr = bufferToBinaryString(buf);
+    return piexif.load(binStr);
+  } catch(e) { return null; }
+}
+
+function gpsFromExif(exifObj) {
+  try {
+    const gps=exifObj && exifObj.GPS;
     if (!gps||gps[piexif.GPSIFD.GPSLatitude]==null) return null;
     const lat=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
     const lng=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
     if (isNaN(lat)||isNaN(lng)) return null;
     return {lat,lng};
   } catch(e){return null;}
+}
+
+function landmarkFromExif(exifObj) {
+  try {
+    const desc = exifObj && exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.ImageDescription];
+    if (!desc) return null;
+    const m = /REPERE_ID:([A-Za-z0-9-]+)(?:;REPERE_NUM:(\d+))?/.exec(desc);
+    if (!m) return null;
+    return {id:m[1], num: m[2]?parseInt(m[2]):null};
+  } catch(e){ return null; }
 }
 
 function dataUrlToBlob(dataUrl) {
@@ -410,40 +546,78 @@ function makeThumb(src, w, h) {
   return c.toDataURL('image/jpeg',0.7);
 }
 
+// Genere la miniature directement depuis le fichier/Blob (pas de passage par une
+// chaine base64 de plusieurs Mo). createImageBitmap utilise un decodage natif,
+// souvent accelere materiellement, et on libere la memoire immediatement apres usage.
+async function makeThumbFromBlob(blob) {
+  if (window.createImageBitmap) {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      try {
+        const w=bitmap.width, h=bitmap.height;
+        const s=Math.min(w,h), ox=(w-s)/2, oy=(h-s)/2;
+        const c=document.createElement('canvas'); c.width=200; c.height=200;
+        c.getContext('2d').drawImage(bitmap, ox, oy, s, s, 0, 0, 200, 200);
+        return c.toDataURL('image/jpeg',0.7);
+      } finally { bitmap.close(); }
+    } catch(e) { /* on retombe sur la methode de secours ci-dessous */ }
+  }
+  return await new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{ try{ resolve(makeThumb(img,img.naturalWidth,img.naturalHeight)); } finally { URL.revokeObjectURL(url); } };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+    img.src=url;
+  });
+}
+
 function fileNameFor(ts) {
   const d=new Date(ts), p=n=>String(n).padStart(2,'0');
-  return 'IMG_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+'.jpg';
+  let base = 'IMG_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+  // Le numero de repere est ajoute dans le nom uniquement comme repere visuel
+  // pour l'utilisateur (tri/lecture rapide d'un dossier) ; ce n'est jamais
+  // la source de verite du regroupement, qui reste l'UUID en EXIF.
+  if (landmark) base += '_R'+landmark.num;
+  return base+'.jpg';
 }
 
 async function takePhoto() {
   if (!stream) return;
-  const video=document.getElementById('video'), canvas=document.getElementById('canvas');
-  canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  let full=canvas.toDataURL('image/jpeg',0.9);
-  if (pos) full=injectGPS(full,pos.lat,pos.lng);
-  const thumb=makeThumb(video,video.videoWidth,video.videoHeight);
-  const ts=new Date().toISOString();
-  const fname=fileNameFor(ts);
-  const photo={
-    id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-    ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
-    thumb, full, fname, source:'app'
-  };
-  photos.unshift(photo);
-  await dbPut(photo);
-  updateGalBadge();
-  checkNearby();
-  if (map) addPhotoMarker(photo);
-  if (dirHandle) {
-    try {
-      await writePhotoToFolder(fname, full);
-      showToast('Photo enregistree + exportee');
-    } catch(e) {
-      showToast('Photo enregistree (export impossible)','var(--amber)');
+  try {
+    const video=document.getElementById('video'), canvas=document.getElementById('canvas');
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0);
+    let fullDataUrl=canvas.toDataURL('image/jpeg',0.9);
+    if (pos) fullDataUrl=injectGPS(fullDataUrl,pos.lat,pos.lng);
+    const fullBlob=dataUrlToBlob(fullDataUrl); // stockage en Blob natif : plus compact et plus rapide que du base64
+    const thumb=makeThumb(video,video.videoWidth,video.videoHeight);
+    const ts=new Date().toISOString();
+    const fname=fileNameFor(ts);
+    const photo={
+      id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
+      thumb, full:fullBlob, fname, source:'app',
+      repere_id: landmark?landmark.id:null, repere_num: landmark?landmark.num:null
+    };
+    const listEntry={...photo}; delete listEntry.full; // la liste en memoire ne garde jamais le full-res
+    photos.unshift(listEntry);
+    await dbPut(photo);
+    updateGalBadge();
+    checkNearby();
+    if (map) addPhotoMarker(listEntry);
+    if (dirHandle) {
+      try {
+        await writePhotoToFolder(fname, fullDataUrl);
+        showToast('Photo enregistree + exportee');
+      } catch(e) {
+        showToast('Photo enregistree (export impossible)','var(--amber)');
+      }
+    } else {
+      showToast('Photo enregistree','var(--amber)');
     }
-  } else {
-    showToast('Photo enregistree','var(--amber)');
+  } catch(e) {
+    console.error('takePhoto error', e);
+    showToast('Erreur lors de la prise de photo','var(--red)');
   }
 }
 
@@ -507,10 +681,6 @@ async function ensurePermission() {
   return perm==='granted';
 }
 
-function blobToDataURL(blob) {
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(blob);});
-}
-
 async function scanFolder() {
   if (!dirHandle) return;
   const ok=await ensurePermission();
@@ -519,12 +689,19 @@ async function scanFolder() {
   const logEl=document.getElementById('scan-result');
   logEl.style.display='block';
   let log=['Scan en cours...'];
-  logEl.textContent=log.join('\n');
+  // Les mises a jour du log sont regroupees (requestAnimationFrame) au lieu d'etre
+  // ecrites dans le DOM a chaque fichier : ca evite des centaines de reflows
+  // pendant un import de nombreuses photos.
+  let logScheduled=false;
+  const flushLog=()=>{ logEl.textContent=log.join('\n'); logEl.scrollTop=logEl.scrollHeight; };
+  const scheduleLog=()=>{ if (logScheduled) return; logScheduled=true; requestAnimationFrame(()=>{ flushLog(); logScheduled=false; }); };
+  flushLog();
   const scanBtn=document.getElementById('scan-btn');
   scanBtn.disabled=true;
   scanBtn.innerHTML='<span class="spin"></span> Scan...';
   const knownNames=new Set(photos.map(p=>p.fname).filter(Boolean));
   let added=0,skippedNoGps=0,skippedKnown=0,errors=0,total=0;
+  const newlyAdded=[];
   try {
     for await (const [name,handle] of dirHandle.entries()) {
       if (handle.kind!=='file') continue;
@@ -533,41 +710,38 @@ async function scanFolder() {
       if (knownNames.has(name)){skippedKnown++;continue;}
       try {
         const file=await handle.getFile();
-        const dataUrl=await blobToDataURL(file);
-        const gps=extractGPS(dataUrl);
-        if (!gps){skippedNoGps++;log.push('✗ '+name+' - pas de GPS');logEl.textContent=log.join('\n');continue;}
-        const thumb=await new Promise(res=>{
-          const img=new Image();
-          img.onload=()=>res(makeThumb(img,img.naturalWidth,img.naturalHeight));
-          img.onerror=()=>res(dataUrl);
-          img.src=dataUrl;
-        });
+        const exifObj=await readExifFromFile(file);
+        const gps=exifObj?gpsFromExif(exifObj):null;
+        if (!gps){skippedNoGps++;log.push('✗ '+name+' - pas de GPS');scheduleLog();continue;}
+        const rep=exifObj?landmarkFromExif(exifObj):null;
+        const thumb=await makeThumbFromBlob(file);
         const photo={
           id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
           ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
           lat:gps.lat, lng:gps.lng, acc:null,
-          thumb, full:dataUrl, fname:name, source:'import'
+          thumb, full:file, fname:name, source:'import', // le fichier original est stocke tel quel : zero recompression, zero conversion base64
+          repere_id: rep?rep.id:null, repere_num: rep?rep.num:null
         };
-        photos.unshift(photo);
+        const listEntry={...photo}; delete listEntry.full;
+        photos.unshift(listEntry);
         await dbPut(photo);
         knownNames.add(name);
         added++;
-        log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')');
+        newlyAdded.push(listEntry);
+        log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
       } catch(e){
         errors++;
         log.push('! '+name+' - erreur: '+e.message);
       }
-      logEl.textContent=log.join('\n');
-      logEl.scrollTop=logEl.scrollHeight;
+      scheduleLog();
     }
   } catch(e){ log.push('Erreur scan: '+e.message); }
   updateGalBadge();
   checkNearby();
-  if (map){map.remove();map=null;initMap();}
+  if (map) newlyAdded.forEach(addPhotoMarker); // ajout incremental : la carte/tuiles ne sont jamais rechargees
   log.push('---');
   log.push('Termine : '+added+' importee(s), '+skippedNoGps+' sans GPS, '+skippedKnown+' deja connue(s), '+errors+' erreur(s) / '+total+' jpg.');
-  logEl.textContent=log.join('\n');
-  logEl.scrollTop=logEl.scrollHeight;
+  flushLog();
   scanBtn.disabled=false;
   scanBtn.innerHTML='Scanner le dossier (importer nouvelles photos)';
   if (added>0) showToast(added+' photo(s) importee(s) !');
@@ -587,7 +761,7 @@ function renderGallery() {
         <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
         <p>Lat ${ph.lat!=null?ph.lat.toFixed(6):'-'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'-'}</p>
         <p>Precision : ${ph.acc?Math.round(ph.acc)+' m':'-'}</p>
-        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importee':'App'}</span>
+        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importee':'App'}</span>${ph.repere_num?`<span class="rep-tag">🏷️ #${ph.repere_num}</span>`:''}
       </div>
       <button class="del-btn" data-id="${ph.id}" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">✕</button>
     </div>`).join('');
@@ -606,19 +780,34 @@ async function deletePhoto(id) {
   updateGalBadge();
   renderGallery();
   checkNearby();
-  if (map){map.remove();map=null;initMap();}
+  removePhotoMarker(id);
+}
+
+let lightboxObjectUrl = null;
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+  if (lightboxObjectUrl) { URL.revokeObjectURL(lightboxObjectUrl); lightboxObjectUrl=null; }
 }
 
 async function openLightbox(id) {
   const ph=await dbGetPhoto(id);
   if (!ph) return;
-  document.getElementById('lightbox-img').src=ph.full||ph.thumb;
-  document.getElementById('lightbox-meta').innerHTML='<b>'+new Date(ph.ts).toLocaleString('fr-FR')+'</b> Lat '+(ph.lat!=null?ph.lat.toFixed(6):'-')+' / Lng '+(ph.lng!=null?ph.lng.toFixed(6):'-');
+  if (lightboxObjectUrl) { URL.revokeObjectURL(lightboxObjectUrl); lightboxObjectUrl=null; }
+  let src;
+  if (ph.full instanceof Blob) {
+    src = URL.createObjectURL(ph.full); // photos recentes : stockees en Blob natif
+    lightboxObjectUrl = src;
+  } else {
+    src = ph.full || ph.thumb; // compatibilite avec d'anciennes photos stockees en base64
+  }
+  document.getElementById('lightbox-img').src=src;
+  document.getElementById('lightbox-meta').innerHTML='<b>'+new Date(ph.ts).toLocaleString('fr-FR')+'</b> Lat '+(ph.lat!=null?ph.lat.toFixed(6):'-')+' / Lng '+(ph.lng!=null?ph.lng.toFixed(6):'-')+(ph.repere_num?' &nbsp;🏷️ Repère #'+ph.repere_num:'');
   document.getElementById('lightbox').classList.add('show');
 }
 
-document.getElementById('lightbox-close').addEventListener('click', ()=>document.getElementById('lightbox').classList.remove('show'));
-document.getElementById('lightbox').addEventListener('click', function(e){if(e.target===this)this.classList.remove('show');});
+document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', function(e){if(e.target===this) closeLightbox();});
 
 let userMarker=null, userCircle=null;
 
@@ -626,18 +815,26 @@ function initMap() {
   if (map) return;
   map=L.map('map',{zoomControl:true}).setView([46.5,2.3],6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
+  markersById.clear();
   photos.forEach(addPhotoMarker);
   if (pos) updateMapPos();
 }
 
 function addPhotoMarker(ph) {
   if (ph.lat==null||ph.lng==null||!map) return;
+  if (markersById.has(ph.id)) return; // evite les doublons si deja present
   const icon=L.divIcon({
     html:'<img src="'+ph.thumb+'" style="width:44px;height:44px;border-radius:50%;border:3px solid var(--accent);object-fit:cover">',
     className:'',iconSize:[44,44],iconAnchor:[22,22]
   });
-  L.marker([ph.lat,ph.lng],{icon}).addTo(map)
-    .bindPopup('<img src="'+ph.thumb+'" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" data-id="'+ph.id+'" class="map-popup-img"><br><small>'+new Date(ph.ts).toLocaleString('fr-FR')+'</small>');
+  const marker=L.marker([ph.lat,ph.lng],{icon}).addTo(map)
+    .bindPopup('<img src="'+ph.thumb+'" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" data-id="'+ph.id+'" class="map-popup-img"><br><small>'+new Date(ph.ts).toLocaleString('fr-FR')+(ph.repere_num?' — 🏷️ Repère #'+ph.repere_num:'')+'</small>');
+  markersById.set(ph.id, marker);
+}
+
+function removePhotoMarker(id) {
+  const m=markersById.get(id);
+  if (m && map) { map.removeLayer(m); markersById.delete(id); }
 }
 
 document.getElementById('map').addEventListener('click', e=>{
@@ -659,12 +856,24 @@ function updateMapPos() {
 }
 
 async function init() {
-  photos = await dbGetAll();
+  const all = await dbGetAll();
+  // On ne garde JAMAIS le full (pleine resolution) dans le tableau "photos" en memoire :
+  // il n'est utile qu'au moment d'ouvrir la photo en grand (lightbox), qui le relit
+  // directement depuis IndexedDB a la demande. Sans ca, toute la galerie en pleine
+  // resolution resterait chargee en RAM en permanence -> lags et crashs sur mobile.
+  photos = all.map(p => {
+    if (p && Object.prototype.hasOwnProperty.call(p,'full')) {
+      const {full, ...rest} = p;
+      return rest;
+    }
+    return p;
+  });
   photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   updateGalBadge();
   checkNearby();
   startGPS();
   await restoreFolderHandle();
+  await initLandmark();
 }
 
 init();
