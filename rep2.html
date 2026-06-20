@@ -11,7 +11,10 @@
 <link rel="preconnect" href="https://unpkg.com">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -97,6 +100,9 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 .landmark-btn{flex-shrink:0;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#0d9488;color:#fff;white-space:nowrap}
 .landmark-btn:active{transform:scale(.96)}
 .rep-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;background:rgba(20,184,166,.2);color:#5eead4;margin-left:4px}
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background-color:rgba(59,130,246,.35)}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background-color:rgba(59,130,246,.85);color:#fff;font-weight:700}
+
 </style>
 </head>
 <body>
@@ -202,6 +208,7 @@ let landmark = null; // {id, num, startedAt}
 const NEARBY_RADIUS = 50;
 const EXIF_PREFIX_BYTES = 1024*1024; // 1 Mo : largement suffisant pour lire les segments EXIF/GPS (limite JPEG = 64 Ko/segment) sans decoder toute la photo -> scan d'import beaucoup plus rapide
 let markersById = new Map(); // id photo -> marqueur Leaflet, pour MAJ incrementale de la carte (pas de rechargement complet)
+let clusterGroup = null; // regroupe les marqueurs photo en clusters (chunkedLoading) pour un affichage fluide meme avec des centaines de points
 
 let _dbPromise = null;
 function idbOpen() {
@@ -607,8 +614,13 @@ async function takePhoto() {
     if (map) addPhotoMarker(listEntry);
     if (dirHandle) {
       try {
-        await writePhotoToFolder(fname, fullDataUrl);
-        showToast('Photo enregistree + exportee');
+        const ok = await ensurePermission(); // redemande la permission si besoin (le tap sur l'obturateur compte comme geste utilisateur) : export immediat possible des la 1re photo, meme apres relance de l'app
+        if (ok) {
+          await writePhotoToFolder(fname, fullDataUrl);
+          showToast('Photo enregistree + exportee');
+        } else {
+          showToast('Photo enregistree (permission dossier refusee)','var(--amber)');
+        }
       } catch(e) {
         showToast('Photo enregistree (export impossible)','var(--amber)');
       }
@@ -812,29 +824,48 @@ document.getElementById('lightbox').addEventListener('click', function(e){if(e.t
 let userMarker=null, userCircle=null;
 
 function initMap() {
-  if (map) return;
-  map=L.map('map',{zoomControl:true}).setView([46.5,2.3],6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
+  if (map) return; // la carte n'est creee qu'une seule fois pour toute la duree de vie de l'app
+  map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([46.5,2.3],6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OSM',maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:2
+  }).addTo(map);
+  clusterGroup=L.markerClusterGroup({
+    chunkedLoading:true,   // ajoute les marqueurs par paquets sans bloquer le thread principal
+    chunkInterval:200,
+    chunkDelay:30,
+    spiderfyOnMaxZoom:true,
+    showCoverageOnHover:false,
+    maxClusterRadius:60,
+    disableClusteringAtZoom:18
+  });
+  map.addLayer(clusterGroup);
   markersById.clear();
-  photos.forEach(addPhotoMarker);
+  clusterGroup.addLayers(photos.filter(ph=>ph.lat!=null&&ph.lng!=null).map(buildPhotoMarker).filter(Boolean));
   if (pos) updateMapPos();
 }
 
-function addPhotoMarker(ph) {
-  if (ph.lat==null||ph.lng==null||!map) return;
-  if (markersById.has(ph.id)) return; // evite les doublons si deja present
+function buildPhotoMarker(ph) {
+  if (ph.lat==null||ph.lng==null) return null;
+  if (markersById.has(ph.id)) return null;
   const icon=L.divIcon({
     html:'<img src="'+ph.thumb+'" style="width:44px;height:44px;border-radius:50%;border:3px solid var(--accent);object-fit:cover">',
     className:'',iconSize:[44,44],iconAnchor:[22,22]
   });
-  const marker=L.marker([ph.lat,ph.lng],{icon}).addTo(map)
+  const marker=L.marker([ph.lat,ph.lng],{icon})
     .bindPopup('<img src="'+ph.thumb+'" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" data-id="'+ph.id+'" class="map-popup-img"><br><small>'+new Date(ph.ts).toLocaleString('fr-FR')+(ph.repere_num?' — 🏷️ Repère #'+ph.repere_num:'')+'</small>');
   markersById.set(ph.id, marker);
+  return marker;
+}
+
+function addPhotoMarker(ph) {
+  if (!map||!clusterGroup) return; // la carte n'est pas encore ouverte : rien a faire, photos.forEach() au prochain initMap() s'en chargera
+  const marker=buildPhotoMarker(ph);
+  if (marker) clusterGroup.addLayer(marker); // ajout incremental dans le cluster, jamais de rechargement de la carte entiere
 }
 
 function removePhotoMarker(id) {
   const m=markersById.get(id);
-  if (m && map) { map.removeLayer(m); markersById.delete(id); }
+  if (m && clusterGroup) { clusterGroup.removeLayer(m); markersById.delete(id); }
 }
 
 document.getElementById('map').addEventListener('click', e=>{
