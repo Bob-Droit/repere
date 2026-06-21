@@ -44,9 +44,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s;border-style:solid}
 #shutter:active{transform:scale(.9)}
 #shutter svg{width:28px;height:28px;fill:#fff}
-.video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:4/3}
+.video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:3/4}
 video{width:100%;height:100%;object-fit:cover;display:block}
 .overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px)}
+.center-overlay{position:absolute;inset:0;display:none;pointer-events:none}
+.center-overlay.show{display:block}
+.center-overlay::before,.center-overlay::after{content:'';position:absolute;background:rgba(255,255,255,.8)}
+.center-overlay::before{left:0;right:0;top:50%;height:1px;transform:translateY(-50%)}
+.center-overlay::after{top:0;bottom:0;left:50%;width:1px;transform:translateX(-50%)}
+.center-circle{position:absolute;top:50%;left:50%;width:62%;max-width:280px;aspect-ratio:1;transform:translate(-50%,-50%);border:2.5px solid #22c55e;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.center-dot{position:absolute;top:50%;left:50%;width:6px;height:6px;background:#22c55e;border-radius:50%;transform:translate(-50%,-50%)}
 .nearby-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0}
 .nearby-strip::-webkit-scrollbar{display:none}
 .nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange);cursor:pointer}
@@ -146,13 +153,18 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
   <div class="video-wrap">
     <video id="video" autoplay playsinline muted></video>
     <div class="overlay-badge" id="vid-badge">Appuyer sur Demarrer</div>
+    <div class="center-overlay" id="center-overlay">
+      <div class="center-circle"></div>
+      <div class="center-dot"></div>
+    </div>
   </div>
-  <div class="row" style="justify-content:center;gap:16px">
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-toggle">Demarrer</button>
+  <div class="row" style="justify-content:center;gap:12px">
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 16px" id="cam-toggle">Demarrer</button>
     <button id="shutter" disabled title="Prendre une photo">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2h-4l-1.5-2h-5L9 3z" fill-rule="evenodd"/></svg>
     </button>
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-switch">Flip</button>
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 16px" id="cam-switch">Flip</button>
+    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 16px" id="center-toggle" title="Afficher le viseur de centrage">🎯</button>
   </div>
   <canvas id="canvas" style="display:none"></canvas>
 </div>
@@ -208,6 +220,7 @@ let dirHandle = null;
 let landmark = null; // {id, num, startedAt}
 const NEARBY_RADIUS = 50;
 const EXIF_PREFIX_BYTES = 1024*1024; // 1 Mo : largement suffisant pour lire les segments EXIF/GPS (limite JPEG = 64 Ko/segment) sans decoder toute la photo -> scan d'import beaucoup plus rapide
+const CAPTURE_RATIO = 3/4; // ratio largeur/hauteur des photos prises (portrait), identique au cadre affiche a l'ecran
 let markersById = new Map(); // id photo -> marqueur Leaflet, pour MAJ incrementale de la carte (pas de rechargement complet)
 let clusterGroup = null; // regroupe les marqueurs photo en clusters (chunkedLoading) pour un affichage fluide meme avec des centaines de points
 
@@ -473,6 +486,11 @@ document.getElementById('cam-toggle').addEventListener('click', toggleCamera);
 document.getElementById('cam-switch').addEventListener('click', switchCam);
 document.getElementById('shutter').addEventListener('click', takePhoto);
 
+document.getElementById('center-toggle').addEventListener('click', () => {
+  const on = document.getElementById('center-overlay').classList.toggle('show');
+  document.getElementById('center-toggle').style.background = on ? 'var(--green)' : '';
+});
+
 function buildGPSExif(lat, lng) {
   const gps={};
   gps[piexif.GPSIFD.GPSVersionID]=[2,3,0,0];
@@ -593,8 +611,15 @@ async function takePhoto() {
   if (!stream) return;
   try {
     const video=document.getElementById('video'), canvas=document.getElementById('canvas');
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-    canvas.getContext('2d').drawImage(video,0,0);
+    // Recadrage centre sur le ratio CAPTURE_RATIO (3:4 portrait), identique
+    // au cache visuel "object-fit:cover" affiche a l'ecran (et au viseur de
+    // centrage) : ce qui est vu est exactement ce qui est enregistre.
+    const vw=video.videoWidth, vh=video.videoHeight;
+    let sw=vw, sh=vh, sx=0, sy=0;
+    if (vw/vh > CAPTURE_RATIO) { sw=vh*CAPTURE_RATIO; sx=(vw-sw)/2; }
+    else { sh=vw/CAPTURE_RATIO; sy=(vh-sh)/2; }
+    canvas.width=sw; canvas.height=sh;
+    canvas.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
     let fullDataUrl=canvas.toDataURL('image/jpeg',0.9);
     if (pos) fullDataUrl=injectGPS(fullDataUrl,pos.lat,pos.lng);
     const fullBlob=dataUrlToBlob(fullDataUrl); // stockage en Blob natif : plus compact et plus rapide que du base64
