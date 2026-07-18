@@ -42,12 +42,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .btn-success{background:var(--green);color:#fff}
 .btn-sm{padding:8px 12px;font-size:13px}
 .btn:disabled{opacity:.4;pointer-events:none}
-#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s}
-#shutter:active{transform:scale(.9)}
+#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .08s,background .15s}
+#shutter:active{transform:scale(.88)}
+#shutter.flash{background:rgba(255,255,255,.9)}
 #shutter svg{width:28px;height:28px;fill:#fff}
 .video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:3/4}
 video{width:100%;height:100%;object-fit:cover;display:block}
-.overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px)}
+.overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px);display:flex;align-items:center;gap:6px}
+.overlay-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.overlay-badge .dot.ok{background:var(--green)}
+.overlay-badge .dot.warn{background:var(--amber)}
 .center-overlay{position:absolute;inset:0;display:none;pointer-events:none}
 .center-overlay.show{display:block}
 .center-overlay::before,.center-overlay::after{content:'';position:absolute;background:rgba(255,255,255,.8)}
@@ -55,11 +59,14 @@ video{width:100%;height:100%;object-fit:cover;display:block}
 .center-overlay::after{top:0;bottom:0;left:50%;width:1px;transform:translateX(-50%)}
 .center-circle{position:absolute;top:50%;left:50%;width:62%;max-width:280px;aspect-ratio:1;transform:translate(-50%,-50%);border:2.5px solid #22c55e;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
 .center-dot{position:absolute;top:50%;left:50%;width:6px;height:6px;background:#22c55e;border-radius:50%;transform:translate(-50%,-50%)}
+.flash-overlay{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash-overlay.go{animation:flashfx .25s ease-out}
+@keyframes flashfx{0%{opacity:.85}100%{opacity:0}}
 .nearby-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0}
 .nearby-strip::-webkit-scrollbar{display:none}
-.nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange);cursor:pointer}
+.nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange);cursor:pointer;background:var(--surface2)}
 .alert-box{background:rgba(249,115,22,.15);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--orange);font-weight:600;display:flex;align-items:center;gap:8px}
-.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;z-index:9999;white-space:nowrap}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;z-index:9999;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1}
 #gallery{display:flex;flex-direction:column;gap:10px}
 .gal-item{background:var(--surface2);border-radius:var(--radius);overflow:hidden;display:flex;gap:12px;align-items:center;padding:10px}
@@ -70,6 +77,8 @@ video{width:100%;height:100%;object-fit:cover;display:block}
 .src-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600}
 .src-app{background:rgba(59,130,246,.2);color:var(--accent)}
 .src-import{background:rgba(34,197,94,.2);color:var(--green)}
+.exp-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;margin-left:4px;background:rgba(148,163,184,.2);color:var(--muted)}
+.exp-tag.pending{background:rgba(245,158,11,.2);color:var(--amber)}
 .tab-bar{display:flex;background:var(--surface2);border-radius:var(--radius);overflow:hidden;margin-bottom:4px}
 .tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none}
 .tab.active{background:var(--accent);color:#fff}
@@ -110,15 +119,14 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 .rep-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;background:rgba(20,184,166,.2);color:#5eead4;margin-left:4px}
 .marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background-color:rgba(59,130,246,.35)}
 .marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background-color:rgba(59,130,246,.85);color:#fff;font-weight:700}
-/* Galerie : lazy img placeholder */
 .gal-item img[data-src]{background:var(--surface);border:1px solid var(--surface2)}
-/* Folder mode-select */
 .mode-btns{display:flex;gap:8px;flex-wrap:wrap}
 .mode-btns .btn{font-size:13px;padding:10px 8px}
 .mode-active{outline:2px solid var(--accent)}
 .folder-section{background:var(--surface2);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px}
 .folder-section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-/* Vitesse : désactive les transitions coûteuses sur mobile */
+.queue-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.queue-bar .spin{width:12px;height:12px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -162,11 +170,12 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
   </div>
   <div class="video-wrap">
     <video id="video" autoplay playsinline muted></video>
-    <div class="overlay-badge" id="vid-badge">Appuyer sur Démarrer</div>
+    <div class="overlay-badge" id="vid-badge"><span class="dot" id="vid-dot"></span><span id="vid-text">Appuyer sur Démarrer</span></div>
     <div class="center-overlay" id="center-overlay">
       <div class="center-circle"></div>
       <div class="center-dot"></div>
     </div>
+    <div class="flash-overlay" id="flash-overlay"></div>
   </div>
   <div class="row" style="justify-content:center;gap:12px">
     <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 16px" id="cam-toggle">Démarrer</button>
@@ -199,7 +208,7 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
         <div class="folder-name" id="folder-name">Aucun dossier choisi</div>
       </div>
     </div>
-    <button class="btn btn-primary" id="choose-folder-btn">📂 Choisir / changer le dossier</button>
+    <button class="btn btn-primary" id="choose-folder-btn">📂 Choisir le dossier (une seule fois)</button>
   </div>
 
   <div class="folder-section">
@@ -212,13 +221,18 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
   </div>
 
   <div class="info-box">
-    Les photos sont exportées en <b>.jpg</b> avec coordonnées GPS en EXIF. Le dossier est mémorisé entre les sessions.
+    Le dossier est mémorisé <b>en permanence</b>, même après fermeture de l'appli. Photos exportées en <b>.jpg</b> avec GPS en EXIF, écriture instantanée en arrière-plan.
+  </div>
+
+  <div class="folder-section" id="queue-section" style="display:none">
+    <div class="folder-section-title">File d'export</div>
+    <div class="queue-bar"><span class="spin"></span><span id="queue-text">0 en attente</span></div>
   </div>
 
   <div class="folder-section">
     <div class="folder-section-title">Scanner / importer</div>
-    <button class="btn btn-success" id="scan-btn" disabled>🔍 Scanner le dossier (importer nouvelles photos)</button>
-    <div style="font-size:12px;color:var(--muted)">Importe les .jpg du dossier ayant des coordonnées GPS. Les photos importées sont chargées en mémoire.</div>
+    <button class="btn btn-success" id="scan-btn" disabled>🔍 Scanner le dossier (rapide, incrémental)</button>
+    <div style="font-size:12px;color:var(--muted)">Ne relit que les fichiers nouveaux ou modifiés depuis le dernier scan. Importe les .jpg avec GPS EXIF.</div>
   </div>
 
   <div class="folder-section">
@@ -244,33 +258,36 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 // ============================================================
 // CONFIG
 // ============================================================
-const IDB_NAME    = 'reperes_ign_v3';
+const IDB_NAME    = 'reperes_ign_v4';
 const IDB_PHOTOS  = 'photos';
 const IDB_FS      = 'handles';
 const IDB_META    = 'meta';
+const IDB_SCANIDX = 'scanindex'; // index incrémental du dossier: nom -> {size,mtime}
 
-const NEARBY_RADIUS   = 150;   // mètres — augmenté de 50 → 150
+const NEARBY_RADIUS   = 150;
 const CAPTURE_RATIO   = 3/4;
-const EXIF_PREFIX     = 1024*1024; // 1 Mo max pour lire l'EXIF
+const EXIF_PREFIX     = 1024*1024;
+const SCAN_CONCURRENCY = 6; // lectures EXIF en parallèle
 
-// Cache mémoire des File objects importés par scan (clé = fname)
-// Évite de re-lire IDB au moment d'ouvrir une photo importée en lightbox
-const fileCache = new Map();
+const fileCache = new Map(); // id -> File/Blob natif pour accès instantané lightbox
 
 // ============================================================
 // ÉTAT GLOBAL
 // ============================================================
-let photos     = [];   // liste allégée (sans .full) pour l'UI
+let photos     = [];
 let pos        = null;
 let stream     = null;
 let facingMode = 'environment';
 let map        = null;
 let dirHandle  = null;
+let dirPermGranted = false;
 let landmark   = null;
-let folderMode = 'both'; // 'both' | 'export'
+let folderMode = 'both';
 
 let markersById  = new Map();
 let clusterGroup = null;
+let mapNeedsResize = false;
+let mapResizeObserver = null;
 
 // ============================================================
 // IndexedDB
@@ -279,12 +296,13 @@ let _dbPromise = null;
 function idbOpen() {
   if (_dbPromise) return _dbPromise;
   _dbPromise = new Promise((res, rej) => {
-    const req = indexedDB.open(IDB_NAME, 2);
+    const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(IDB_PHOTOS)) db.createObjectStore(IDB_PHOTOS, {keyPath:'id'});
       if (!db.objectStoreNames.contains(IDB_FS))     db.createObjectStore(IDB_FS);
       if (!db.objectStoreNames.contains(IDB_META))   db.createObjectStore(IDB_META);
+      if (!db.objectStoreNames.contains(IDB_SCANIDX)) db.createObjectStore(IDB_SCANIDX);
     };
     req.onsuccess = e => {
       const db = e.target.result;
@@ -365,6 +383,25 @@ async function idbLoadMeta(k) {
     req.onerror   = e => rej(e.target.error);
   });
 }
+// Index de scan : permet de savoir instantanément si un fichier du dossier
+// a déjà été vu, SANS ouvrir le fichier ni lire l'EXIF (juste taille+date).
+async function idbLoadScanIndex() {
+  const db = await idbOpen();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_SCANIDX,'readonly');
+    const req = tx.objectStore(IDB_SCANIDX).get('index');
+    req.onsuccess = e => res(e.target.result || {});
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function idbSaveScanIndex(idx) {
+  const db = await idbOpen();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_SCANIDX,'readwrite');
+    tx.objectStore(IDB_SCANIDX).put(idx,'index');
+    tx.oncomplete = res; tx.onerror = e=>rej(e.target.error);
+  });
+}
 
 // ============================================================
 // UTILS
@@ -391,6 +428,19 @@ function bufferToBinaryString(buf) {
   const bytes=new Uint8Array(buf); const CHUNK=0x8000; let r='';
   for(let i=0;i<bytes.length;i+=CHUNK) r+=String.fromCharCode.apply(null,bytes.subarray(i,i+CHUNK));
   return r;
+}
+async function mapLimit(items, limit, fn) {
+  const results=new Array(items.length);
+  let i=0;
+  async function worker(){
+    while(i<items.length){
+      const idx=i++;
+      results[idx]=await fn(items[idx],idx);
+    }
+  }
+  const workers=Array.from({length:Math.min(limit,items.length)},worker);
+  await Promise.all(workers);
+  return results;
 }
 
 // ============================================================
@@ -446,9 +496,16 @@ function onPos(p) {
   const bar=document.getElementById('prec-bar');
   bar.style.width=pct+'%'; bar.style.background=color;
   document.getElementById('prec-dot').style.background=color;
-  document.getElementById('vid-badge').textContent=stream?'GPS OK ✓':'Appuyer sur Démarrer';
+  updateVidBadge();
   checkNearby();
   if (map) updateMapPos();
+}
+function updateVidBadge(){
+  const dot=document.getElementById('vid-dot');
+  const txt=document.getElementById('vid-text');
+  if(!stream){ dot.className='dot'; txt.textContent='Appuyer sur Démarrer'; return; }
+  if(pos){ dot.className='dot ok'; txt.textContent='GPS OK ✓'; }
+  else { dot.className='dot warn'; txt.textContent='Attente GPS…'; }
 }
 
 // ============================================================
@@ -481,23 +538,35 @@ document.getElementById('nearby-strip').addEventListener('click', e=>{
 });
 
 // ============================================================
-// CAMÉRA
+// CAMÉRA — démarrage rapide, flux gardé chaud
 // ============================================================
 async function toggleCamera() {
   if (stream) {
     stream.getTracks().forEach(t=>t.stop()); stream=null;
     document.getElementById('cam-toggle').textContent='Démarrer';
     document.getElementById('shutter').disabled=true;
-    document.getElementById('vid-badge').textContent='Appuyer sur Démarrer';
+    updateVidBadge();
     return;
   }
+  document.getElementById('cam-toggle').textContent='…';
   try {
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1920},height:{ideal:1080}},audio:false});
-    document.getElementById('video').srcObject=stream;
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},
+      audio:false
+    });
+    const video=document.getElementById('video');
+    video.srcObject=stream;
+    // readyState check pour activer le shutter dès que la première frame est prête,
+    // pas seulement au 'loadedmetadata' (plus rapide et plus fiable sur mobile)
+    const enableShutter=()=>{ document.getElementById('shutter').disabled=false; };
+    if (video.readyState>=2) enableShutter();
+    else video.addEventListener('loadeddata', enableShutter, {once:true});
     document.getElementById('cam-toggle').textContent='Arrêter';
-    document.getElementById('shutter').disabled=false;
-    document.getElementById('vid-badge').textContent=pos?'GPS OK ✓':'Attente GPS…';
-  } catch(e){ showToast('Caméra refusée','var(--red)'); }
+    updateVidBadge();
+  } catch(e){
+    document.getElementById('cam-toggle').textContent='Démarrer';
+    showToast('Caméra refusée','var(--red)');
+  }
 }
 async function switchCam() {
   facingMode=facingMode==='environment'?'user':'environment';
@@ -509,6 +578,25 @@ document.getElementById('shutter').addEventListener('click', takePhoto);
 document.getElementById('center-toggle').addEventListener('click', ()=>{
   const on=document.getElementById('center-overlay').classList.toggle('show');
   document.getElementById('center-toggle').style.background=on?'var(--green)':'';
+});
+
+// Reprise propre du flux si l'app revient au premier plan (mobile: le flux
+// peut être coupé par l'OS en arrière-plan)
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible'){
+    if(stream){
+      const track=stream.getVideoTracks()[0];
+      if(track && track.readyState==='ended'){
+        stream=null;
+        document.getElementById('cam-toggle').textContent='Démarrer';
+        document.getElementById('shutter').disabled=true;
+        updateVidBadge();
+      }
+    }
+    if(map && mapNeedsResize){ map.invalidateSize(); mapNeedsResize=false; }
+    // Re-vérifie la permission dossier au retour (elle peut avoir expiré)
+    if(dirHandle) silentlyRefreshPermission();
+  }
 });
 
 // ============================================================
@@ -596,9 +684,9 @@ async function makeThumbFromBlob(blob) {
 }
 
 // ============================================================
-// PRISE DE PHOTO — priorité vitesse, 0 lag
+// PRISE DE PHOTO — priorité vitesse, 0 lag, verrou anti-double-appui court
 // ============================================================
-let isTakingPhoto = false; // verrou anti-double-appui
+let isTakingPhoto = false;
 
 function fileNameFor(ts) {
   const d=new Date(ts),p=n=>String(n).padStart(2,'0');
@@ -607,11 +695,18 @@ function fileNameFor(ts) {
   return base+'.jpg';
 }
 
+function flashShutter(){
+  const btn=document.getElementById('shutter');
+  btn.classList.add('flash');
+  setTimeout(()=>btn.classList.remove('flash'),120);
+  const fx=document.getElementById('flash-overlay');
+  fx.classList.remove('go'); void fx.offsetWidth; fx.classList.add('go');
+}
+
 async function takePhoto() {
   if(!stream||isTakingPhoto) return;
   isTakingPhoto=true;
-  const shutterBtn=document.getElementById('shutter');
-  shutterBtn.disabled=true;
+  flashShutter(); // feedback instantané, avant tout traitement
 
   try {
     const video=document.getElementById('video'),canvas=document.getElementById('canvas');
@@ -622,19 +717,14 @@ async function takePhoto() {
     canvas.width=sw; canvas.height=sh;
     canvas.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
 
-    // Qualité légèrement réduite (0.88 vs 0.9) pour des fichiers plus légers = export plus rapide
     let fullDataUrl=canvas.toDataURL('image/jpeg',0.88);
     if(pos) fullDataUrl=injectGPS(fullDataUrl,pos.lat,pos.lng);
     const fullBlob=dataUrlToBlob(fullDataUrl);
-
-    // Miniature en parallèle pendant qu'on prépare le reste
-    const thumbPromise=makeThumb(video,video.videoWidth,video.videoHeight);
+    const thumb=makeThumb(video,video.videoWidth,video.videoHeight); // synchrone, canvas déjà chaud
 
     const ts=new Date().toISOString();
     const fname=fileNameFor(ts);
     const id='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
-
-    const thumb=await thumbPromise; // attend la miniature
 
     const photo={
       id, ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
@@ -643,24 +733,16 @@ async function takePhoto() {
     };
     const listEntry={...photo}; delete listEntry.full;
 
-    // Mise à jour UI instantanée — IDB en arrière-plan
+    // UI instantanée
     photos.unshift(listEntry);
     updateGalBadge();
     checkNearby();
     if(map) addPhotoMarker(listEntry);
 
-    // Sauvegarde IDB async (ne bloque pas l'UI)
+    // Persistance + export en arrière-plan, ne bloque jamais l'appareil photo
     dbPut(photo).catch(console.error);
-
-    // Export dossier si mode actif
     if(dirHandle && folderMode==='both') {
-      ensurePermission().then(ok=>{
-        if(!ok) return;
-        writeBlobToFolder(fname,fullBlob)
-          .then(()=>{ photo.exported=true; listEntry.exported=true; dbPut(photo).catch(console.error); })
-          .catch(console.error);
-      });
-      showToast('Photo ✓');
+      enqueueExport(photo, listEntry);
     } else {
       showToast('Photo enregistrée','var(--amber)');
     }
@@ -668,15 +750,75 @@ async function takePhoto() {
     console.error('takePhoto',e);
     showToast('Erreur photo','var(--red)');
   } finally {
-    isTakingPhoto=false;
-    shutterBtn.disabled=false;
+    // Verrou très court : juste le temps d'éviter un double-tap accidentel,
+    // ne dépend jamais de l'export/écriture disque.
+    setTimeout(()=>{ isTakingPhoto=false; }, 180);
   }
 }
 
 // ============================================================
-// DOSSIER & EXPORT
+// FILE D'EXPORT — écriture séquentielle non-bloquante avec retry
 // ============================================================
-async function writePhotoToFolder(fname,dataUrl){ return writeBlobToFolder(fname,dataUrlToBlob(dataUrl)); }
+const exportQueue=[];
+let exportRunning=false;
+
+function updateQueueUI(){
+  const sec=document.getElementById('queue-section');
+  const txt=document.getElementById('queue-text');
+  if(exportQueue.length>0 || exportRunning){
+    sec.style.display='flex';
+    txt.textContent=exportQueue.length+(exportRunning?1:0)+' en attente d\'export';
+  } else {
+    sec.style.display='none';
+  }
+}
+
+function enqueueExport(photo, listEntry){
+  exportQueue.push({photo, listEntry, attempts:0});
+  updateQueueUI();
+  runExportQueue();
+}
+
+async function runExportQueue(){
+  if(exportRunning) return;
+  exportRunning=true;
+  while(exportQueue.length){
+    const job=exportQueue.shift();
+    updateQueueUI();
+    try{
+      const ok=await ensurePermission();
+      if(!ok){
+        showToast('Permission dossier perdue — réautorise dans l\'onglet Dossier','var(--red)');
+        exportQueue.length=0; // vide la file, l'utilisateur devra relancer via "Exporter les photos non exportées"
+        break;
+      }
+      await writeBlobToFolder(job.photo.fname, job.photo.full);
+      job.photo.exported=true;
+      job.listEntry.exported=true;
+      dbPut(job.photo).catch(console.error);
+      showToast('Photo ✓ exportée');
+      renderGalleryIfActive();
+    }catch(e){
+      job.attempts++;
+      if(job.attempts<3){
+        exportQueue.push(job); // retry en fin de file
+      }else{
+        console.error('export failed', job.photo.fname, e);
+        showToast('Échec export : '+job.photo.fname,'var(--red)');
+      }
+    }
+  }
+  exportRunning=false;
+  updateQueueUI();
+}
+function renderGalleryIfActive(){
+  const galPage=document.getElementById('gal-page');
+  if(galPage.classList.contains('active')) renderGallery();
+}
+
+// ============================================================
+// DOSSIER — sélection une fois, persistance permanente, re-permission silencieuse
+// ============================================================
 async function writeBlobToFolder(fname,blob){
   const fh=await dirHandle.getFileHandle(fname,{create:true});
   const w=await fh.createWritable();
@@ -687,20 +829,33 @@ async function chooseFolder(){
   if(!supportsFSAccess()){showToast('Non supporté (Chrome requis)','var(--red)');return;}
   try{
     dirHandle=await window.showDirectoryPicker({mode:'readwrite'});
+    dirPermGranted=true;
     await idbSaveHandle(dirHandle);
+    await idbSaveScanIndex({}); // nouveau dossier => on repart d'un index de scan vierge
     updateFolderUI();
-    showToast('Dossier sélectionné');
+    showToast('Dossier mémorisé de façon permanente');
   }catch(e){ if(e.name!=='AbortError') showToast('Annulé','var(--muted)'); }
 }
 async function ensurePermission(){
   if(!dirHandle) return false;
+  if(dirPermGranted) return true;
   let p=await dirHandle.queryPermission({mode:'readwrite'});
   if(p!=='granted') p=await dirHandle.requestPermission({mode:'readwrite'});
-  return p==='granted';
+  dirPermGranted=(p==='granted');
+  return dirPermGranted;
+}
+// Tentative silencieuse (sans requestPermission, qui exige un geste utilisateur) :
+// met juste à jour l'indicateur visuel pour prévenir si une ré-autorisation manuelle sera nécessaire.
+async function silentlyRefreshPermission(){
+  if(!dirHandle) return;
+  try{
+    const p=await dirHandle.queryPermission({mode:'readwrite'});
+    dirPermGranted=(p==='granted');
+    updateFolderUI();
+  }catch(e){}
 }
 document.getElementById('choose-folder-btn').addEventListener('click', chooseFolder);
 
-// Mode sélection dossier
 document.getElementById('mode-both').addEventListener('click',()=>setFolderMode('both'));
 document.getElementById('mode-export').addEventListener('click',()=>setFolderMode('export'));
 function setFolderMode(m){
@@ -732,6 +887,7 @@ async function exportAllToFolder(){
   }
   btn.disabled=false; btn.textContent='⬆️ Exporter les photos non exportées';
   showToast(done+' exportée(s)'+(errors?', '+errors+' erreur(s)':''),errors?'var(--amber)':'var(--green)');
+  renderGalleryIfActive();
 }
 
 function updateFolderUI(){
@@ -740,9 +896,14 @@ function updateFolderUI(){
   const scanBtn=document.getElementById('scan-btn');
   const exportBtn=document.getElementById('export-all-btn');
   if(dirHandle){
-    dot.style.background='var(--green)';
-    name.textContent=dirHandle.name;
     scanBtn.disabled=false; exportBtn.disabled=false;
+    if(dirPermGranted){
+      dot.style.background='var(--green)';
+      name.textContent=dirHandle.name;
+    }else{
+      dot.style.background='var(--amber)';
+      name.textContent=dirHandle.name+' (appuyer sur Scanner pour réautoriser)';
+    }
   }else{
     dot.style.background='var(--muted)';
     name.textContent='Aucun dossier choisi';
@@ -756,26 +917,22 @@ async function restoreFolderHandle(){
     if(!handle) return;
     dirHandle=handle;
     const perm=await handle.queryPermission({mode:'readwrite'});
-    if(perm==='granted'){
-      updateFolderUI();
-    }else{
-      document.getElementById('folder-dot').style.background='var(--amber)';
-      document.getElementById('folder-name').textContent=handle.name+' (Scanner pour réautoriser)';
-      document.getElementById('scan-btn').disabled=false;
-      document.getElementById('export-all-btn').disabled=false;
-    }
+    dirPermGranted=(perm==='granted');
+    updateFolderUI();
   }catch(e){ console.warn('restore handle failed',e); }
 }
 
 // ============================================================
-// SCAN DOSSIER — chargement en mémoire
+// SCAN DOSSIER — incrémental ultra-rapide via index (nom -> taille+mtime)
+// N'ouvre / ne lit l'EXIF QUE des fichiers réellement nouveaux ou modifiés.
 // ============================================================
 document.getElementById('scan-btn').addEventListener('click', scanFolder);
 async function scanFolder(){
   if(!dirHandle) return;
   const ok=await ensurePermission();
-  if(!ok){showToast('Permission refusée','var(--red)');return;}
+  if(!ok){showToast('Permission refusée','var(--red)');updateFolderUI();return;}
   updateFolderUI();
+
   const logEl=document.getElementById('scan-result');
   logEl.style.display='block';
   let log=['Scan en cours…'];
@@ -786,57 +943,89 @@ async function scanFolder(){
   const scanBtn=document.getElementById('scan-btn');
   scanBtn.disabled=true; scanBtn.innerHTML='<span class="spin"></span> Scan…';
 
+  const t0=performance.now();
+  const scanIndex = await idbLoadScanIndex(); // {fname: {size,mtime}}
   const knownNames=new Set(photos.map(p=>p.fname).filter(Boolean));
-  let added=0,skippedNoGps=0,skippedKnown=0,errors=0,total=0;
-  const newlyAdded=[];
 
+  // Étape 1 — listing rapide du dossier + détection des candidats
+  // (comparaison taille/mtime, aucune lecture de contenu)
+  const candidates=[];
+  let total=0, skippedIdentical=0;
   try{
     for await(const [name,handle] of dirHandle.entries()){
       if(handle.kind!=='file') continue;
       if(!/\.(jpe?g)$/i.test(name)) continue;
       total++;
-      if(knownNames.has(name)){skippedKnown++;continue;}
-      try{
-        const file=await handle.getFile();
-        const exifObj=await readExifFromFile(file);
-        const gps=exifObj?gpsFromExif(exifObj):null;
-        if(!gps){skippedNoGps++;log.push('✗ '+name+' — pas de GPS');schedLog();continue;}
-        const rep=exifObj?landmarkFromExif(exifObj):null;
-        const thumb=await makeThumbFromBlob(file);
-        const photo={
-          id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-          ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
-          lat:gps.lat, lng:gps.lng, acc:null,
-          thumb, full:file, // STOCKÉ EN MÉMOIRE : File object natif, pas de re-lecture IDB
-          fname:name, source:'import', exported:true,
-          repere_id:rep?rep.id:null, repere_num:rep?rep.num:null
-        };
-        // fileCache : accès instantané en lightbox
-        fileCache.set(photo.id, file);
-
-        const listEntry={...photo}; delete listEntry.full;
-        photos.unshift(listEntry);
-
-        // IDB : on stocke le File object (pas de copie blob, très léger)
-        await dbPut(photo);
-        knownNames.add(name);
-        added++;
-        newlyAdded.push(listEntry);
-        log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
-      }catch(e){ errors++; log.push('! '+name+' — erreur: '+e.message); }
-      schedLog();
+      const file=await handle.getFile(); // léger : juste les métadonnées système
+      const prev=scanIndex[name];
+      if(prev && prev.size===file.size && prev.mtime===file.lastModified){
+        skippedIdentical++;
+        continue; // fichier déjà indexé et inchangé : on ignore totalement
+      }
+      candidates.push({name, handle, file});
     }
-  }catch(e){ log.push('Erreur scan: '+e.message); }
+  }catch(e){ log.push('Erreur listing: '+e.message); flushLog(); }
 
+  log.push(total+' fichier(s) .jpg — '+skippedIdentical+' déjà indexé(s) ignoré(s) — '+candidates.length+' à analyser');
+  flushLog();
+
+  // Étape 2 — lecture EXIF uniquement des candidats, en parallèle (concurrency limitée)
+  let added=0,skippedNoGps=0,errors=0;
+  const newlyAdded=[];
+  await mapLimit(candidates, SCAN_CONCURRENCY, async ({name,handle,file})=>{
+    try{
+      const exifObj=await readExifFromFile(file);
+      const gps=exifObj?gpsFromExif(exifObj):null;
+      // On met à jour l'index de scan dans tous les cas (connu = pas la peine de rouvrir la prochaine fois)
+      scanIndex[name]={size:file.size, mtime:file.lastModified};
+
+      if(!gps){
+        skippedNoGps++;
+        log.push('✗ '+name+' — pas de GPS'); schedLog();
+        return;
+      }
+      if(knownNames.has(name)){
+        // déjà importé sous ce nom (cas rare : modifié mais déjà en base) — on ne réimporte pas en double
+        schedLog();
+        return;
+      }
+      const rep=exifObj?landmarkFromExif(exifObj):null;
+      const thumb=await makeThumbFromBlob(file);
+      const photo={
+        id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+        ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
+        lat:gps.lat, lng:gps.lng, acc:null,
+        thumb, full:file,
+        fname:name, source:'import', exported:true,
+        repere_id:rep?rep.id:null, repere_num:rep?rep.num:null
+      };
+      fileCache.set(photo.id, file);
+      const listEntry={...photo}; delete listEntry.full;
+      photos.unshift(listEntry);
+      await dbPut(photo);
+      knownNames.add(name);
+      added++;
+      newlyAdded.push(listEntry);
+      log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
+    }catch(e){ errors++; log.push('! '+name+' — erreur: '+e.message); }
+    schedLog();
+  });
+
+  await idbSaveScanIndex(scanIndex);
+
+  photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   updateGalBadge();
   checkNearby();
   if(map) newlyAdded.forEach(addPhotoMarker);
+  renderGalleryIfActive();
+
+  const dt=((performance.now()-t0)/1000).toFixed(2);
   log.push('---');
-  log.push('Terminé : '+added+' importée(s), '+skippedNoGps+' sans GPS, '+skippedKnown+' déjà connue(s), '+errors+' erreur(s) / '+total+' jpg.');
+  log.push('Terminé en '+dt+'s : '+added+' importée(s), '+skippedNoGps+' sans GPS, '+skippedIdentical+' ignorée(s) (index), '+errors+' erreur(s) / '+total+' jpg.');
   flushLog();
-  scanBtn.disabled=false; scanBtn.innerHTML='🔍 Scanner le dossier (importer nouvelles photos)';
-  if(added>0) showToast(added+' photo(s) importée(s) !');
-  else showToast('Aucune nouvelle photo GPS','var(--amber)');
+  scanBtn.disabled=false; scanBtn.innerHTML='🔍 Scanner le dossier (rapide, incrémental)';
+  if(added>0) showToast(added+' photo(s) importée(s) en '+dt+'s !');
+  else showToast('Aucune nouvelle photo ('+dt+'s)','var(--amber)');
 }
 
 // ============================================================
@@ -848,7 +1037,6 @@ function renderGallery(){
   const gal=document.getElementById('gallery');
   if(!photos.length){gal.innerHTML='<div class="empty">Aucune photo encore.</div>';return;}
 
-  // Rendu HTML sans les src d'images (chargées lazily)
   gal.innerHTML=photos.map(ph=>`
     <div class="gal-item">
       <img data-src="${ph.thumb}" alt="photo" data-id="${ph.id}" class="gal-thumb" width="70" height="70">
@@ -856,12 +1044,11 @@ function renderGallery(){
         <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
         <p>Lat ${ph.lat!=null?ph.lat.toFixed(6):'-'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'-'}</p>
         <p>Précision : ${ph.acc?Math.round(ph.acc)+' m':'-'}</p>
-        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importée':'App'}</span>${ph.repere_num?`<span class="rep-tag">🏷️ #${ph.repere_num}</span>`:''}
+        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importée':'App'}</span>${ph.repere_num?`<span class="rep-tag">🏷️ #${ph.repere_num}</span>`:''}${ph.source==='app'?`<span class="exp-tag ${ph.exported?'':'pending'}">${ph.exported?'Exportée':'En attente'}</span>`:''}
       </div>
       <button class="del-btn" data-id="${ph.id}" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">✕</button>
     </div>`).join('');
 
-  // IntersectionObserver pour charger les miniatures à la volée
   if(galObserver) galObserver.disconnect();
   galObserver=new IntersectionObserver((entries)=>{
     entries.forEach(e=>{
@@ -890,7 +1077,7 @@ async function deletePhoto(id){
 }
 
 // ============================================================
-// LIGHTBOX — accès rapide via fileCache
+// LIGHTBOX
 // ============================================================
 let lightboxObjectUrl=null;
 function closeLightbox(){
@@ -898,7 +1085,6 @@ function closeLightbox(){
   if(lightboxObjectUrl){URL.revokeObjectURL(lightboxObjectUrl);lightboxObjectUrl=null;}
 }
 async function openLightbox(id){
-  // D'abord essai fileCache (scan mémoire) : instantané
   let src=null;
   const cached=fileCache.get(id);
   if(cached){
@@ -924,15 +1110,16 @@ document.getElementById('lightbox-close').addEventListener('click', closeLightbo
 document.getElementById('lightbox').addEventListener('click', function(e){if(e.target===this) closeLightbox();});
 
 // ============================================================
-// CARTE — FIX invalidateSize + init correcte
+// CARTE — robuste face aux ajouts après coup, jamais de doublons,
+// resize fiable via ResizeObserver + retour d'onglet
 // ============================================================
 let userMarker=null, userCircle=null;
 
 function initMap(){
   if(map){
-    // Forcer la carte à recalculer sa taille (fix coin haut-gauche)
-    setTimeout(()=>map.invalidateSize(),50);
+    requestAnimationFrame(()=>map.invalidateSize());
     if(pos) updateMapPos();
+    syncMapMarkers();
     return;
   }
   map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([46.5,2.3],6);
@@ -947,14 +1134,33 @@ function initMap(){
   map.addLayer(clusterGroup);
   markersById.clear();
 
-  // Ajout des marqueurs existants
-  const layers=photos.filter(ph=>ph.lat!=null&&ph.lng!=null).map(buildPhotoMarker).filter(Boolean);
-  if(layers.length) clusterGroup.addLayers(layers);
-
+  syncMapMarkers();
   if(pos) updateMapPos();
 
-  // invalidateSize après un court délai (le tab vient de devenir visible)
-  setTimeout(()=>map.invalidateSize(),100);
+  // ResizeObserver : recalcule la taille dès que le conteneur change réellement
+  // (bien plus fiable qu'un setTimeout arbitraire quand on bascule d'onglet)
+  const mapEl=document.getElementById('map');
+  if(window.ResizeObserver){
+    mapResizeObserver=new ResizeObserver(()=>{ map.invalidateSize(); });
+    mapResizeObserver.observe(mapEl);
+  }
+  requestAnimationFrame(()=>map.invalidateSize());
+  setTimeout(()=>map.invalidateSize(),150);
+}
+
+// Ajoute tous les marqueurs manquants sans jamais dupliquer un marqueur existant.
+// Appelé à chaque ouverture de l'onglet Carte pour rattraper les photos prises/scannées
+// pendant qu'on était sur un autre onglet.
+function syncMapMarkers(){
+  if(!map||!clusterGroup) return;
+  const toAdd=[];
+  for(const ph of photos){
+    if(ph.lat==null||ph.lng==null) continue;
+    if(markersById.has(ph.id)) continue;
+    const m=buildPhotoMarker(ph);
+    if(m) toAdd.push(m);
+  }
+  if(toAdd.length) clusterGroup.addLayers(toAdd);
 }
 
 function buildPhotoMarker(ph){
@@ -1005,7 +1211,7 @@ function showPage(p){
   if(page) page.classList.add('active');
   const tab=document.querySelector('.tab[data-page="'+p+'"]');
   if(tab) tab.classList.add('active');
-  if(p==='map') initMap();   // invalidateSize inclus dans initMap
+  if(p==='map') initMap();
   if(p==='gal') renderGallery();
 }
 document.getElementById('tab-bar').addEventListener('click', e=>{
@@ -1023,16 +1229,12 @@ function updateGalBadge(){
 // INIT
 // ============================================================
 async function init(){
-  // Restaurer mode dossier
   const savedMode=await idbLoadMeta('folderMode');
   if(savedMode) setFolderMode(savedMode);
 
   const all=await dbGetAll();
-  // On charge en mémoire : les File objects (photos importées) restent accessibles
-  // les Blobs (photos app) sont éjectés du tableau "photos" (accès via IDB à la demande)
   photos=all.map(p=>{
     if(p&&Object.prototype.hasOwnProperty.call(p,'full')){
-      // Pour les imports : garder le File en fileCache pour accès rapide lightbox
       if(p.full instanceof File || (p.full && p.full.size !== undefined && p.source==='import')){
         try{ fileCache.set(p.id, p.full); }catch(e){}
       }
