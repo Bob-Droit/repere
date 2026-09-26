@@ -2,25 +2,36 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Reperes IGN - Terrain</title>
+<title>Repères IGN - Terrain</title>
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js" defer></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
 :root{
   --bg:#0f172a;--surface:#1e293b;--surface2:#334155;
   --text:#f1f5f9;--muted:#94a3b8;--accent:#3b82f6;
   --green:#22c55e;--amber:#f59e0b;--red:#ef4444;--orange:#f97316;
-  --radius:12px
+  --radius:12px;
+  --sat:env(safe-area-inset-top,0px);
+  --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px);
+  --sar:env(safe-area-inset-right,0px);
 }
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden}
-#map{flex:1;min-height:280px;z-index:1}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden;
+  padding-top:var(--sat);padding-bottom:var(--sab);padding-left:var(--sal);padding-right:var(--sar)}
+#map{width:100%;height:100%;min-height:0;z-index:1}
 .panel{background:var(--surface);border-top:1px solid var(--surface2);padding:14px;display:flex;flex-direction:column;gap:10px}
 .row{display:flex;gap:8px;align-items:center}
 .gps-bar{background:var(--surface2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -29,42 +40,91 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .precision-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .precision-bar-wrap{flex:1;height:6px;background:var(--surface);border-radius:3px;overflow:hidden}
 .precision-bar{height:100%;border-radius:3px;transition:width .4s,background .4s}
-.btn{flex:1;border:none;border-radius:var(--radius);padding:14px 10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .1s}
+
+/* --- Page caméra compacte : le viseur prend le maximum d'espace,
+   tout le reste (repère, GPS, coords, alertes) devient des overlays
+   fins par-dessus le flux vidéo plutôt que des blocs empilés --- */
+#cam-page.active{display:flex;flex-direction:column;padding:8px;gap:6px;flex:1;min-height:0}
+.video-wrap{flex:1;min-height:0}
+.cam-overlay-top{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px;align-items:flex-start;pointer-events:none;z-index:5}
+.cam-overlay-top>*{pointer-events:auto}
+.mini-landmark{flex:1;min-width:0;background:rgba(15,23,42,.72);backdrop-filter:blur(4px);border-radius:10px;padding:6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid transparent}
+.mini-landmark.active{border-color:#14b8a6;background:rgba(13,148,136,.28)}
+.mini-landmark-txt{min-width:0}
+.mini-landmark-txt b{font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#5eead4}
+.mini-landmark-txt span{font-size:10px;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-landmark:not(.active) .mini-landmark-txt b{color:var(--muted)}
+.landmark-fab{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:none;background:#0d9488;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.landmark-fab:active{transform:scale(.9)}
+.landmark-fab.end{background:var(--red)}
+.mini-gps{flex-shrink:0;background:rgba(15,23,42,.72);backdrop-filter:blur(4px);border-radius:10px;padding:6px 10px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:64px}
+.mini-gps-acc{font-size:12px;font-weight:700}
+.mini-gps-dot{width:7px;height:7px;border-radius:50%}
+.mini-gps-row{display:flex;align-items:center;gap:5px}
+.mini-coords{font-size:9px;color:var(--muted);font-family:monospace;white-space:nowrap}
+.cam-overlay-bottom{position:absolute;left:8px;right:8px;bottom:8px;z-index:5;display:flex;flex-direction:column;gap:6px}
+.mini-alert{background:rgba(249,115,22,.85);backdrop-filter:blur(4px);border-radius:10px;padding:6px 10px;font-size:12px;font-weight:600;color:#fff;display:flex;align-items:center;gap:6px}
+.nearby-strip{padding:0}
+.controls-row{flex-shrink:0;display:flex;justify-content:center;align-items:center;gap:10px;padding:4px 0}
+.side-btn{flex:0 0 auto;width:48px;height:48px;border-radius:50%;padding:0;font-size:18px}
+@media (max-height:700px){
+  #shutter{width:60px;height:60px}
+  .controls-row{gap:8px}
+  .side-btn{width:42px;height:42px;font-size:16px}
+}
+.btn{flex:1;border:none;border-radius:var(--radius);padding:14px 10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .1s;color:var(--text);background:var(--surface2)}
 .btn:active{transform:scale(.96)}
 .btn-primary{background:var(--accent);color:#fff}
 .btn-danger{background:var(--red);color:#fff}
 .btn-neutral{background:var(--surface2);color:var(--text)}
 .btn-success{background:var(--green);color:#fff}
+.btn-sm{padding:8px 12px;font-size:13px}
 .btn:disabled{opacity:.4;pointer-events:none}
-#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s;border-style:solid}
-#shutter:active{transform:scale(.9)}
+#shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .08s,background .15s}
+#shutter:active{transform:scale(.88)}
+#shutter.flash{background:rgba(255,255,255,.9)}
 #shutter svg{width:28px;height:28px;fill:#fff}
-.video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:4/3}
+.video-wrap{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;width:100%;aspect-ratio:3/4}
 video{width:100%;height:100%;object-fit:cover;display:block}
-.overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px)}
+.overlay-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px);display:flex;align-items:center;gap:6px}
+.overlay-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.overlay-badge .dot.ok{background:var(--green)}
+.overlay-badge .dot.warn{background:var(--amber)}
+.center-overlay{position:absolute;inset:0;display:none;pointer-events:none}
+.center-overlay.show{display:block}
+.center-overlay::before,.center-overlay::after{content:'';position:absolute;background:rgba(255,255,255,.8)}
+.center-overlay::before{left:0;right:0;top:50%;height:1px;transform:translateY(-50%)}
+.center-overlay::after{top:0;bottom:0;left:50%;width:1px;transform:translateX(-50%)}
+.center-circle{position:absolute;top:50%;left:50%;width:62%;max-width:280px;aspect-ratio:1;transform:translate(-50%,-50%);border:2.5px solid #22c55e;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.center-dot{position:absolute;top:50%;left:50%;width:6px;height:6px;background:#22c55e;border-radius:50%;transform:translate(-50%,-50%)}
+.flash-overlay{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash-overlay.go{animation:flashfx .25s ease-out}
+@keyframes flashfx{0%{opacity:.85}100%{opacity:0}}
 .nearby-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0}
 .nearby-strip::-webkit-scrollbar{display:none}
-.nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange);cursor:pointer}
+.nearby-thumb{flex-shrink:0;width:80px;height:80px;border-radius:8px;object-fit:cover;border:2px solid var(--orange);cursor:pointer;background:var(--surface2)}
 .alert-box{background:rgba(249,115,22,.15);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--orange);font-weight:600;display:flex;align-items:center;gap:8px}
-.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;z-index:9999;white-space:nowrap}
+.toast{position:fixed;bottom:calc(100px + var(--sab));left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;z-index:9999;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .toast.show{opacity:1}
 #gallery{display:flex;flex-direction:column;gap:10px}
 .gal-item{background:var(--surface2);border-radius:var(--radius);overflow:hidden;display:flex;gap:12px;align-items:center;padding:10px}
-.gal-item img{width:70px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer}
+.gal-item img{width:70px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer;background:var(--surface)}
 .gal-meta{flex:1;min-width:0}
 .gal-meta p{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gal-meta b{font-size:13px}
 .src-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600}
 .src-app{background:rgba(59,130,246,.2);color:var(--accent)}
 .src-import{background:rgba(34,197,94,.2);color:var(--green)}
+.exp-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;margin-left:4px;background:rgba(148,163,184,.2);color:var(--muted)}
+.exp-tag.pending{background:rgba(245,158,11,.2);color:var(--amber)}
 .tab-bar{display:flex;background:var(--surface2);border-radius:var(--radius);overflow:hidden;margin-bottom:4px}
 .tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none}
 .tab.active{background:var(--accent);color:#fff}
 .page{display:none}
 .page.active{display:flex;flex-direction:column;gap:10px}
-#map-page{display:none;flex:1;flex-direction:column}
+#map-page{display:none;flex:1;flex-direction:column;min-height:0}
 #map-page.active{display:flex}
-#cam-page.active,#gal-page.active,#folder-page.active{padding:14px;padding-top:10px;overflow-y:auto;flex:1}
+#cam-page.active,#gal-page.active,#folder-page.active{padding:14px;padding-top:10px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
 h2{font-size:16px;font-weight:600;color:var(--muted)}
 .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
 .coord-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -85,7 +145,7 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 .lightbox img{max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain}
 .lightbox-meta{color:var(--text);font-size:13px;text-align:center}
 .lightbox-meta b{display:block;font-size:15px;margin-bottom:4px}
-.lightbox-close{position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lightbox-close{position:absolute;top:calc(16px + var(--sat));right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .badge-count{background:var(--orange);color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;margin-left:4px}
 .landmark-bar{background:var(--surface2);border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid transparent}
 .landmark-bar.active{border-color:#14b8a6;background:rgba(20,184,166,.12)}
@@ -94,57 +154,76 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 .landmark-sub{font-size:11px;color:var(--muted)}
 .landmark-btn{flex-shrink:0;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#0d9488;color:#fff;white-space:nowrap}
 .landmark-btn:active{transform:scale(.96)}
+.landmark-btn.end{background:var(--red)}
 .rep-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:2px;font-weight:600;background:rgba(20,184,166,.2);color:#5eead4;margin-left:4px}
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background-color:rgba(59,130,246,.35)}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background-color:rgba(59,130,246,.85);color:#fff;font-weight:700}
+.gal-item img[data-src]{background:var(--surface);border:1px solid var(--surface2)}
+.mode-btns{display:flex;gap:8px;flex-wrap:wrap}
+.mode-btns .btn{font-size:13px;padding:10px 8px}
+.mode-active{outline:2px solid var(--accent)}
+.folder-section{background:var(--surface2);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px}
+.folder-section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.queue-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.queue-bar .spin{width:12px;height:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 
 <div class="tab-bar" style="margin:10px 10px 0" id="tab-bar">
-  <button class="tab active" data-page="cam">Appareil</button>
-  <button class="tab" data-page="map">Carte</button>
+  <button class="tab active" data-page="cam">📷 Appareil</button>
+  <button class="tab" data-page="map">🗺 Carte</button>
   <button class="tab" data-page="gal">Photos <span id="tab-gal-count" class="badge-count" style="display:none">0</span></button>
   <button class="tab" data-page="folder">Dossier</button>
 </div>
 
 <div id="cam-page" class="page active">
-  <div class="landmark-bar" id="landmark-bar">
-    <div class="landmark-info">
-      <div class="landmark-num" id="landmark-num">Aucun repère actif</div>
-      <div class="landmark-sub" id="landmark-sub">Appuie sur "Nouveau Repère" avant de photographier un point</div>
-    </div>
-    <button class="landmark-btn" id="landmark-btn">📍 Nouveau Repère</button>
-  </div>
-  <div class="gps-bar">
-    <div>
-      <div class="gps-label">Precision GPS</div>
-      <div class="gps-val" id="acc-txt">-</div>
-    </div>
-    <div style="flex:1;max-width:120px">
-      <div class="precision-bar-wrap"><div class="precision-bar" id="prec-bar" style="width:0%"></div></div>
-    </div>
-    <div class="precision-dot" id="prec-dot" style="background:var(--muted)"></div>
-  </div>
-  <div class="coord-row">
-    <div class="coord-box"><span>Latitude</span><b id="lat-txt">-</b></div>
-    <div class="coord-box"><span>Longitude</span><b id="lng-txt">-</b></div>
-  </div>
-  <div id="nearby-alert" style="display:none" class="alert-box">
-    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-    <span id="nearby-count">Photos dans les parages !</span>
-  </div>
-  <div id="nearby-strip-wrap" style="display:none">
-    <div class="nearby-strip" id="nearby-strip"></div>
-  </div>
   <div class="video-wrap">
     <video id="video" autoplay playsinline muted></video>
-    <div class="overlay-badge" id="vid-badge">Appuyer sur Demarrer</div>
+
+    <div class="cam-overlay-top">
+      <div class="mini-landmark" id="landmark-bar">
+        <div class="mini-landmark-txt">
+          <b id="landmark-num">Aucun repère</b>
+          <span id="landmark-sub">Appuyer sur + pour démarrer</span>
+        </div>
+      </div>
+      <button class="landmark-fab" id="landmark-btn" title="Nouveau repère">📍</button>
+      <div class="mini-gps">
+        <div class="mini-gps-row">
+          <span class="mini-gps-acc" id="acc-txt">-</span>
+          <span class="mini-gps-dot" id="prec-dot" style="background:var(--muted)"></span>
+        </div>
+        <span class="mini-coords" id="coords-txt">- , -</span>
+      </div>
+    </div>
+
+    <div class="overlay-badge" id="vid-badge"><span class="dot" id="vid-dot"></span><span id="vid-text">Appuyer sur Démarrer</span></div>
+    <div class="center-overlay" id="center-overlay">
+      <div class="center-circle"></div>
+      <div class="center-dot"></div>
+    </div>
+    <div class="flash-overlay" id="flash-overlay"></div>
+
+    <div class="cam-overlay-bottom">
+      <div id="nearby-alert" style="display:none" class="mini-alert">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <span id="nearby-count">Photos dans les parages !</span>
+      </div>
+      <div id="nearby-strip-wrap" style="display:none">
+        <div class="nearby-strip" id="nearby-strip"></div>
+      </div>
+    </div>
   </div>
-  <div class="row" style="justify-content:center;gap:16px">
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-toggle">Demarrer</button>
+
+  <div class="controls-row">
+    <button class="btn btn-neutral side-btn" id="cam-toggle" title="Démarrer/Arrêter">⏻</button>
     <button id="shutter" disabled title="Prendre une photo">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2h-4l-1.5-2h-5L9 3z" fill-rule="evenodd"/></svg>
     </button>
-    <button class="btn btn-neutral" style="flex:0 0 auto;padding:14px 18px" id="cam-switch">Flip</button>
+    <button class="btn btn-neutral side-btn" id="cam-switch" title="Changer de caméra">🔄</button>
+    <button class="btn btn-neutral side-btn" id="center-toggle" title="Viseur">🎯</button>
   </div>
   <canvas id="canvas" style="display:none"></canvas>
 </div>
@@ -154,12 +233,13 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 </div>
 
 <div id="gal-page" class="page">
-  <h2>Photos enregistrees (<span id="gal-count">0</span>)</h2>
+  <h2>Photos (<span id="gal-count">0</span>)</h2>
   <div id="gallery"><div class="empty">Chargement...</div></div>
 </div>
 
 <div id="folder-page" class="page">
   <h2>Dossier de stockage</h2>
+
   <div class="folder-card">
     <div class="folder-status">
       <div class="folder-dot" id="folder-dot" style="background:var(--muted)"></div>
@@ -168,14 +248,32 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
         <div class="folder-name" id="folder-name">Aucun dossier choisi</div>
       </div>
     </div>
-    <button class="btn btn-primary" id="choose-folder-btn">Choisir / changer le dossier</button>
+    <button class="btn btn-primary" id="choose-folder-btn">📂 Choisir le dossier (une seule fois)</button>
   </div>
-  <div class="info-box">
-    Choisis un dossier une seule fois (ex: <b>Pictures/ReperesIGN</b>). Chaque photo prise sera exportee en <b>.jpg</b> avec coordonnees GPS en EXIF.
+
+  <div class="info-box" id="folder-mode-info">
+    Chaque photo prise est immédiatement exportée dans le dossier choisi, en arrière-plan, sans bloquer l'appareil photo.
   </div>
-  <button class="btn btn-success" id="scan-btn" disabled>Scanner le dossier (importer nouvelles photos)</button>
+
+  <div class="folder-section" id="queue-section" style="display:none">
+    <div class="folder-section-title">File d'export</div>
+    <div class="queue-bar"><span class="spin"></span><span id="queue-text">0 en attente</span></div>
+  </div>
+
+  <div class="folder-section">
+    <div class="folder-section-title">Scanner / importer</div>
+    <button class="btn btn-success" id="scan-btn" disabled>🔍 Scanner le dossier (rapide, incrémental)</button>
+    <div style="font-size:12px;color:var(--muted)">Ne relit que les fichiers nouveaux ou modifiés depuis le dernier scan. Importe les .jpg avec GPS EXIF.</div>
+  </div>
+
+  <div class="folder-section">
+    <div class="folder-section-title">Exporter les photos sans dossier</div>
+    <button class="btn btn-primary" id="export-all-btn" disabled>⬆️ Exporter les photos non exportées</button>
+  </div>
+
+  <div class="warn-box" id="folder-compat-warn" style="display:none"></div>
   <div class="warn-box">
-    Seules les photos avec coordonnees GPS dans leurs metadonnees EXIF seront importees. Photos sans GPS ignorees.
+    Seules les photos avec GPS dans les métadonnées EXIF sont importées lors d'un scan. Photos sans GPS ignorées.
   </div>
   <div id="scan-result" style="display:none" class="scan-log"></div>
 </div>
@@ -189,590 +287,1294 @@ h2{font-size:16px;font-weight:600;color:var(--muted)}
 </div>
 
 <script>
-const IDB_NAME = 'reperes_ign_v3';
-const IDB_PHOTOS = 'photos';
-const IDB_FS = 'handles';
-const IDB_META = 'meta';
-let photos = [];
-let pos = null, stream = null, facingMode = 'environment', map = null;
-let dirHandle = null;
-let landmark = null; // {id, num, startedAt}
-const NEARBY_RADIUS = 50;
+'use strict';
+// ============================================================
+// CONFIG
+// ============================================================
+const IDB_NAME    = 'reperes_ign_v4';
+const IDB_PHOTOS  = 'photos';
+const IDB_FS      = 'handles';
+const IDB_META    = 'meta';
+const IDB_SCANIDX = 'scanindex'; // index incrémental du dossier: nom -> {size,mtime}
 
+const NEARBY_RADIUS    = 150;
+const CAPTURE_RATIO    = 3/4;
+const EXIF_PREFIX      = 1024*1024;
+const SCAN_CONCURRENCY = 6;      // lectures EXIF en parallèle
+const GPS_UI_THROTTLE  = 800;    // ms mini entre deux recalculs "nearby" (évite le lag sur watchPosition très fréquent)
+const FILECACHE_MAX    = 60;     // nb max de fichiers natifs gardés en mémoire pour accès instantané lightbox
+
+// Détection d'environnement : natif (Capacitor/Cordova en APK) vs navigateur web.
+// IMPORTANT : window.Capacitor peut être injecté par le bridge APRÈS le parsing
+// de ce script (juste après DOMContentLoaded en général), donc ceci ne doit
+// JAMAIS être figé en const au chargement — toujours réévalué à l'usage.
+function isNativeShell(){ return !!(window.Capacitor || window.cordova); }
+function hasFSAccess(){ return ('showDirectoryPicker' in window) && !isNativeShell(); }
+
+const fileCache = new Map(); // id -> File/Blob natif pour accès instantané lightbox, taille bornée (FILECACHE_MAX)
+
+// ============================================================
+// ÉTAT GLOBAL
+// ============================================================
+let photos     = [];
+let pos        = null;
+let stream     = null;
+let facingMode = 'environment';
+let map        = null;
+let dirHandle  = null;
+let dirPermGranted = false;
+let landmark   = null;
+
+let markersById  = new Map();
+let clusterGroup = null;
+let mapNeedsResize = false;
+
+// ============================================================
+// IndexedDB
+// ============================================================
+let _dbPromise = null;
 function idbOpen() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(IDB_NAME, 2);
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(IDB_PHOTOS)) db.createObjectStore(IDB_PHOTOS, {keyPath:'id'});
-      if (!db.objectStoreNames.contains(IDB_FS)) db.createObjectStore(IDB_FS);
-      if (!db.objectStoreNames.contains(IDB_META)) db.createObjectStore(IDB_META);
+      if (!db.objectStoreNames.contains(IDB_FS))     db.createObjectStore(IDB_FS);
+      if (!db.objectStoreNames.contains(IDB_META))   db.createObjectStore(IDB_META);
+      if (!db.objectStoreNames.contains(IDB_SCANIDX)) db.createObjectStore(IDB_SCANIDX);
     };
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = e => rej(e.target.error);
+    req.onsuccess = e => {
+      const db = e.target.result;
+      db.onclose = () => { _dbPromise = null; };
+      res(db);
+    };
+    req.onerror = e => { _dbPromise = null; rej(e.target.error); };
   });
+  return _dbPromise;
 }
-
 async function dbGetAll() {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_PHOTOS, 'readonly');
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_PHOTOS,'readonly');
     const req = tx.objectStore(IDB_PHOTOS).getAll();
     req.onsuccess = e => res(e.target.result || []);
-    req.onerror = e => rej(e.target.error);
+    req.onerror   = e => rej(e.target.error);
   });
 }
-
 async function dbPut(photo) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_PHOTOS, 'readwrite');
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_PHOTOS,'readwrite');
     tx.objectStore(IDB_PHOTOS).put(photo);
     tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
+    tx.onerror    = e => rej(e.target.error);
   });
 }
-
 async function dbDelete(id) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_PHOTOS, 'readwrite');
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_PHOTOS,'readwrite');
     tx.objectStore(IDB_PHOTOS).delete(id);
     tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
+    tx.onerror    = e => rej(e.target.error);
   });
 }
-
 async function dbGetPhoto(id) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_PHOTOS, 'readonly');
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_PHOTOS,'readonly');
     const req = tx.objectStore(IDB_PHOTOS).get(id);
     req.onsuccess = e => res(e.target.result || null);
-    req.onerror = e => rej(e.target.error);
+    req.onerror   = e => rej(e.target.error);
   });
 }
-
-async function idbSaveHandle(handle) {
+async function idbSaveHandle(h) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_FS, 'readwrite');
-    tx.objectStore(IDB_FS).put(handle, 'dir');
-    tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_FS,'readwrite');
+    tx.objectStore(IDB_FS).put(h,'dir');
+    tx.oncomplete = res; tx.onerror = e=>rej(e.target.error);
   });
 }
-
 async function idbLoadHandle() {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_FS, 'readonly');
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_FS,'readonly');
     const req = tx.objectStore(IDB_FS).get('dir');
     req.onsuccess = e => res(e.target.result || null);
-    req.onerror = e => rej(e.target.error);
+    req.onerror   = e => rej(e.target.error);
   });
 }
-
-async function idbSaveMeta(key, value) {
+async function idbSaveMeta(k,v) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_META, 'readwrite');
-    tx.objectStore(IDB_META).put(value, key);
-    tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_META,'readwrite');
+    tx.objectStore(IDB_META).put(v,k);
+    tx.oncomplete = res; tx.onerror = e=>rej(e.target.error);
   });
 }
-
-async function idbLoadMeta(key) {
+async function idbLoadMeta(k) {
   const db = await idbOpen();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_META, 'readonly');
-    const req = tx.objectStore(IDB_META).get(key);
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_META,'readonly');
+    const req = tx.objectStore(IDB_META).get(k);
     req.onsuccess = e => res(e.target.result !== undefined ? e.target.result : null);
-    req.onerror = e => rej(e.target.error);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function idbLoadScanIndex() {
+  const db = await idbOpen();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_SCANIDX,'readonly');
+    const req = tx.objectStore(IDB_SCANIDX).get('index');
+    req.onsuccess = e => res(e.target.result || {});
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function idbSaveScanIndex(idx) {
+  const db = await idbOpen();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(IDB_SCANIDX,'readwrite');
+    tx.objectStore(IDB_SCANIDX).put(idx,'index');
+    tx.oncomplete = res; tx.onerror = e=>rej(e.target.error);
   });
 }
 
+// ============================================================
+// UTILS
+// ============================================================
 function uuid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-  // repli simple, toujours unique au sein de l'appareil/session
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8);
-    return v.toString(16);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+    const r=Math.random()*16|0, v=c==='x'?r:(r&0x3|0x8); return v.toString(16);
   });
 }
+function haversine(a,b) {
+  const R=6371000, dLat=(b.lat-a.lat)*Math.PI/180, dLng=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function showToast(msg, color) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.background=color||'var(--green)';
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+function bufferToBinaryString(buf) {
+  const bytes=new Uint8Array(buf); const CHUNK=0x8000; let r='';
+  for(let i=0;i<bytes.length;i+=CHUNK) r+=String.fromCharCode.apply(null,bytes.subarray(i,i+CHUNK));
+  return r;
+}
+async function mapLimit(items, limit, fn) {
+  const results=new Array(items.length);
+  let i=0;
+  async function worker(){
+    while(i<items.length){
+      const idx=i++;
+      results[idx]=await fn(items[idx],idx);
+    }
+  }
+  const workers=Array.from({length:Math.min(limit,items.length)},worker);
+  await Promise.all(workers);
+  return results;
+}
+function cacheFile(id, file){
+  fileCache.set(id, file);
+  if (fileCache.size > FILECACHE_MAX) {
+    const oldestKey = fileCache.keys().next().value;
+    fileCache.delete(oldestKey);
+  }
+}
+function canvasToBlob(canvas, type, quality){
+  return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+}
 
-// ---- Systeme "Nouveau Repere" ----
-// Chaque repere a un UUID genere localement et jamais reutilise : meme si
-// l'appli crashe ou redemarre, le compteur affiche (num) peut etre relu
-// depuis IndexedDB mais c'est TOUJOURS l'UUID, jamais le numero, qui sert
-// a regrouper les photos cote Python. Un bug de numerotation (ex: 1,2,3 puis
-// crash puis a nouveau 1,2) ne peut donc jamais faire croire a tort que deux
-// reperes differents sont identiques.
+// ============================================================
+// REPÈRES (LANDMARKS)
+// ============================================================
 async function initLandmark() {
-  const saved = await idbLoadMeta('currentLandmark');
+  const saved   = await idbLoadMeta('currentLandmark');
   const counter = await idbLoadMeta('landmarkCounter');
   landmark = saved || null;
   window._landmarkCounter = counter || 0;
   updateLandmarkUI();
 }
-
 async function newLandmark() {
-  window._landmarkCounter = (window._landmarkCounter || 0) + 1;
-  landmark = {id: uuid(), num: window._landmarkCounter, startedAt: new Date().toISOString()};
+  window._landmarkCounter = (window._landmarkCounter||0)+1;
+  landmark = {id:uuid(), num:window._landmarkCounter, startedAt:new Date().toISOString()};
   await idbSaveMeta('currentLandmark', landmark);
   await idbSaveMeta('landmarkCounter', window._landmarkCounter);
   updateLandmarkUI();
-  showToast('Repère #'+landmark.num+' démarré', '#0d9488');
+  showToast('Repère #'+landmark.num+' démarré','#0d9488');
 }
-
+async function endLandmark() {
+  landmark = null;
+  await idbSaveMeta('currentLandmark', null);
+  updateLandmarkUI();
+  showToast('Repère terminé','var(--muted)');
+}
 function updateLandmarkUI() {
-  const bar = document.getElementById('landmark-bar');
-  const numEl = document.getElementById('landmark-num');
-  const subEl = document.getElementById('landmark-sub');
+  const bar=document.getElementById('landmark-bar');
+  const btn=document.getElementById('landmark-btn');
   if (landmark) {
     bar.classList.add('active');
-    numEl.textContent = '🏷️ Repère #' + landmark.num + ' actif';
-    subEl.textContent = 'Toutes les photos suivantes seront rattachées à ce repère';
+    document.getElementById('landmark-num').textContent='🏷️ Repère #'+landmark.num;
+    document.getElementById('landmark-sub').textContent='Photos rattachées';
+    btn.textContent='✓';
+    btn.title='Terminer le repère';
+    btn.classList.add('end');
   } else {
     bar.classList.remove('active');
-    numEl.textContent = 'Aucun repère actif';
-    subEl.textContent = 'Appuie sur "Nouveau Repère" avant de photographier un point';
+    document.getElementById('landmark-num').textContent='Aucun repère';
+    document.getElementById('landmark-sub').textContent='Appuyer sur + pour démarrer';
+    btn.textContent='📍';
+    btn.title='Nouveau repère';
+    btn.classList.remove('end');
   }
 }
-
-document.getElementById('landmark-btn').addEventListener('click', newLandmark);
-
-function haversine(a, b) {
-  const R = 6371000, dLat = (b.lat-a.lat)*Math.PI/180, dLng = (b.lng-a.lng)*Math.PI/180;
-  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-}
-
-function showToast(msg, color) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.background = color || 'var(--green)';
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
-}
-
-function showPage(p) {
-  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  const page = document.getElementById(p+'-page');
-  if (page) page.classList.add('active');
-  const tab = document.querySelector('.tab[data-page="'+p+'"]');
-  if (tab) tab.classList.add('active');
-  if (p === 'map') initMap();
-  if (p === 'gal') renderGallery();
-}
-
-document.getElementById('tab-bar').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (tab && tab.dataset.page) showPage(tab.dataset.page);
+document.getElementById('landmark-btn').addEventListener('click', ()=>{
+  if (landmark) endLandmark(); else newLandmark();
 });
 
-function updateGalBadge() {
-  const el = document.getElementById('tab-gal-count');
-  if (photos.length) { el.style.display='inline-block'; el.textContent=photos.length; }
-  else el.style.display='none';
-}
+// ============================================================
+// GPS — throttlé pour éviter de recalculer nearby() à chaque tick
+// ============================================================
+let gpsWatchId = null;
+let lastNearbyCheck = 0;
 
 function startGPS() {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.watchPosition(onPos, ()=>{}, {enableHighAccuracy:true, maximumAge:2000, timeout:10000});
+  if (!navigator.geolocation) { showToast('GPS non disponible sur cet appareil','var(--red)'); return; }
+  if (gpsWatchId !== null) return;
+  gpsWatchId = navigator.geolocation.watchPosition(onPos, onGpsError, {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
 }
-
+function stopGPS() {
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+}
+function onGpsError(err){
+  if (err && err.code === 1) showToast('Permission GPS refusée — active la localisation','var(--red)');
+}
 function onPos(p) {
-  pos = {lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy};
-  const acc = Math.round(pos.acc);
-  document.getElementById('acc-txt').textContent = acc+' m';
-  document.getElementById('lat-txt').textContent = pos.lat.toFixed(6);
-  document.getElementById('lng-txt').textContent = pos.lng.toFixed(6);
-  let pct, color;
-  if (acc<=5){pct=100;color='var(--green)';}
-  else if (acc<=15){pct=70;color='var(--green)';}
-  else if (acc<=30){pct=45;color='var(--amber)';}
-  else{pct=15;color='var(--red)';}
-  const bar = document.getElementById('prec-bar');
-  bar.style.width=pct+'%'; bar.style.background=color;
+  pos={lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy};
+  const acc=Math.round(pos.acc);
+  document.getElementById('acc-txt').textContent=acc+'m';
+  document.getElementById('coords-txt').textContent=pos.lat.toFixed(5)+', '+pos.lng.toFixed(5);
+  let color;
+  if(acc<=5) color='var(--green)';
+  else if(acc<=15) color='var(--green)';
+  else if(acc<=30) color='var(--amber)';
+  else color='var(--red)';
   document.getElementById('prec-dot').style.background=color;
-  checkNearby();
+  updateVidBadge();
+
+  const now=Date.now();
+  if (now - lastNearbyCheck >= GPS_UI_THROTTLE) {
+    lastNearbyCheck = now;
+    checkNearby();
+  }
   if (map) updateMapPos();
 }
+function updateVidBadge(){
+  const dot=document.getElementById('vid-dot');
+  const txt=document.getElementById('vid-text');
+  if(!stream){ dot.className='dot'; txt.textContent='Appuyer sur Démarrer'; return; }
+  if(pos){ dot.className='dot ok'; txt.textContent='GPS OK ✓'; }
+  else { dot.className='dot warn'; txt.textContent='Attente GPS…'; }
+}
 
-let lastAlertIds = '';
+// ============================================================
+// NEARBY
+// ============================================================
+let lastAlertIds='';
 function checkNearby() {
   if (!pos) return;
-  const near = photos.filter(ph => ph.lat!=null && ph.lng!=null && haversine(pos,{lat:ph.lat,lng:ph.lng})<=NEARBY_RADIUS);
-  const alert = document.getElementById('nearby-alert');
-  const strip = document.getElementById('nearby-strip-wrap');
-  const stripEl = document.getElementById('nearby-strip');
+  const near=photos.filter(ph=>ph.lat!=null&&ph.lng!=null&&haversine(pos,{lat:ph.lat,lng:ph.lng})<=NEARBY_RADIUS);
+  const alertEl=document.getElementById('nearby-alert');
+  const stripWrap=document.getElementById('nearby-strip-wrap');
+  const stripEl=document.getElementById('nearby-strip');
   if (near.length) {
-    const key = near.map(p=>p.id).join(',');
-    alert.style.display='flex';
-    document.getElementById('nearby-count').textContent = near.length+' photo'+(near.length>1?'s':'')+' deja prise(s) ici !';
-    stripEl.innerHTML = near.map(ph=>'<img class="nearby-thumb" src="'+ph.thumb+'" data-id="'+ph.id+'">').join('');
-    strip.style.display='block';
-    if (key!==lastAlertIds){showToast('Alerte : photo(s) a proximite !','var(--orange)');lastAlertIds=key;}
+    const key=near.map(p=>p.id).join(',');
+    alertEl.style.display='flex';
+    document.getElementById('nearby-count').textContent=near.length+' photo'+(near.length>1?'s':'')+' déjà prise(s) ici !';
+    if (key!==lastAlertIds) {
+      stripEl.innerHTML=near.map(ph=>'<img class="nearby-thumb" src="'+ph.thumb+'" data-id="'+ph.id+'">').join('');
+      stripWrap.style.display='block';
+      showToast('Alerte : photo(s) à proximité !','var(--orange)');
+      lastAlertIds=key;
+    }
   } else {
-    alert.style.display='none'; strip.style.display='none'; lastAlertIds='';
+    alertEl.style.display='none'; stripWrap.style.display='none'; lastAlertIds='';
   }
 }
-
-document.getElementById('nearby-strip').addEventListener('click', e => {
-  const img = e.target.closest('.nearby-thumb');
-  if (img && img.dataset.id) openLightbox(img.dataset.id);
+document.getElementById('nearby-strip').addEventListener('click', e=>{
+  const img=e.target.closest('.nearby-thumb');
+  if(img&&img.dataset.id) openLightbox(img.dataset.id);
 });
 
+// ============================================================
+// CAMÉRA — démarrage rapide, flux gardé chaud
+// ============================================================
 async function toggleCamera() {
   if (stream) {
-    stream.getTracks().forEach(t=>t.stop()); stream=null;
-    document.getElementById('cam-toggle').textContent='Demarrer';
-    document.getElementById('shutter').disabled=true;
-    document.getElementById('vid-badge').textContent='Appuyer sur Demarrer';
+    stopCameraStream();
     return;
   }
+  document.getElementById('cam-toggle').textContent='…';
   try {
-    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:1920},height:{ideal:1080}},audio:false});
-    document.getElementById('video').srcObject=stream;
-    document.getElementById('cam-toggle').textContent='Arreter';
-    document.getElementById('shutter').disabled=false;
-    document.getElementById('vid-badge').textContent=pos?'GPS OK':'Attente GPS...';
-  } catch(e) {
-    showToast('Camera refusee','var(--red)');
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},
+      audio:false
+    });
+    const video=document.getElementById('video');
+    video.srcObject=stream;
+    const enableShutter=()=>{ document.getElementById('shutter').disabled=false; };
+    if (video.readyState>=2) enableShutter();
+    else video.addEventListener('loadeddata', enableShutter, {once:true});
+    document.getElementById('cam-toggle').textContent='Arrêter';
+    updateVidBadge();
+  } catch(e){
+    document.getElementById('cam-toggle').textContent='Démarrer';
+    showToast('Caméra refusée ou indisponible','var(--red)');
   }
 }
-
-async function switchCam() {
-  facingMode = facingMode==='environment'?'user':'environment';
-  if (stream){stream.getTracks().forEach(t=>t.stop());stream=null;await toggleCamera();}
+function stopCameraStream(){
+  if (!stream) return;
+  stream.getTracks().forEach(t=>t.stop());
+  stream=null;
+  document.getElementById('video').srcObject=null;
+  document.getElementById('cam-toggle').textContent='Démarrer';
+  document.getElementById('shutter').disabled=true;
+  updateVidBadge();
 }
-
+async function switchCam() {
+  facingMode=facingMode==='environment'?'user':'environment';
+  if (stream){ stopCameraStream(); await toggleCamera(); }
+}
 document.getElementById('cam-toggle').addEventListener('click', toggleCamera);
 document.getElementById('cam-switch').addEventListener('click', switchCam);
 document.getElementById('shutter').addEventListener('click', takePhoto);
+document.getElementById('center-toggle').addEventListener('click', ()=>{
+  const on=document.getElementById('center-overlay').classList.toggle('show');
+  document.getElementById('center-toggle').style.background=on?'var(--green)':'';
+});
 
-function buildGPSExif(lat, lng) {
+// Libère la caméra proprement à la fermeture / mise en arrière-plan durable
+window.addEventListener('pagehide', stopCameraStream);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible'){
+    if(stream){
+      const track=stream.getVideoTracks()[0];
+      if(track && track.readyState==='ended') stopCameraStream();
+    }
+    if(map && mapNeedsResize){ map.invalidateSize(); mapNeedsResize=false; }
+    if(dirHandle) silentlyRefreshPermission();
+  }
+});
+
+// ============================================================
+// EXIF / GPS
+// ============================================================
+function buildGPSExif(lat,lng) {
   const gps={};
   gps[piexif.GPSIFD.GPSVersionID]=[2,3,0,0];
   gps[piexif.GPSIFD.GPSLatitudeRef]=lat>=0?'N':'S';
-  gps[piexif.GPSIFD.GPSLatitude]=piexif.GPSHelper.degToDmsRational(lat);
+  gps[piexif.GPSIFD.GPSLatitude]=piexif.GPSHelper.degToDmsRational(Math.abs(lat));
   gps[piexif.GPSIFD.GPSLongitudeRef]=lng>=0?'E':'W';
-  gps[piexif.GPSIFD.GPSLongitude]=piexif.GPSHelper.degToDmsRational(lng);
+  gps[piexif.GPSIFD.GPSLongitude]=piexif.GPSHelper.degToDmsRational(Math.abs(lng));
   return gps;
 }
-
-// Encode le repere actif dans le tag EXIF ImageDescription, sous la forme
-// "REPERE_ID:<uuid>;REPERE_NUM:<num>". C'est la source la plus fiable car
-// elle voyage avec le fichier meme s'il est renomme/deplace/copie - contrairement
-// au nom de fichier que le trieur Python reecrit de toute facon.
 function injectGPS(dataUrl, lat, lng) {
   try {
     const zeroth={};
-    if (landmark) zeroth[piexif.ImageIFD.ImageDescription] = 'REPERE_ID:'+landmark.id+';REPERE_NUM:'+landmark.num;
+    if (landmark) zeroth[piexif.ImageIFD.ImageDescription]='REPERE_ID:'+landmark.id+';REPERE_NUM:'+landmark.num;
     const exifObj={'0th':zeroth,'Exif':{},'GPS':buildGPSExif(lat,lng)};
     return piexif.insert(piexif.dump(exifObj), dataUrl);
-  } catch(e){ return dataUrl; }
+  } catch(e){ console.error('injectGPS',e); return dataUrl; }
 }
-
-function extractGPS(dataUrl) {
+async function readExifFromFile(file) {
   try {
-    const exifObj=piexif.load(dataUrl);
-    const gps=exifObj.GPS;
-    if (!gps||gps[piexif.GPSIFD.GPSLatitude]==null) return null;
-    const lat=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
-    const lng=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
-    if (isNaN(lat)||isNaN(lng)) return null;
+    const head=file.slice(0,Math.min(EXIF_PREFIX,file.size));
+    const buf=await head.arrayBuffer();
+    return piexif.load(bufferToBinaryString(buf));
+  } catch(e){ return null; }
+}
+function gpsFromExif(exifObj) {
+  try {
+    const gps=exifObj&&exifObj.GPS;
+    if(!gps||gps[piexif.GPSIFD.GPSLatitude]==null) return null;
+    let lat=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLatitude],gps[piexif.GPSIFD.GPSLatitudeRef]);
+    let lng=piexif.GPSHelper.dmsRationalToDeg(gps[piexif.GPSIFD.GPSLongitude],gps[piexif.GPSIFD.GPSLongitudeRef]);
+    if(isNaN(lat)||isNaN(lng)) return null;
+    if (gps[piexif.GPSIFD.GPSLatitudeRef]==='S') lat=-Math.abs(lat);
+    if (gps[piexif.GPSIFD.GPSLongitudeRef]==='W') lng=-Math.abs(lng);
     return {lat,lng};
-  } catch(e){return null;}
+  } catch(e){ return null; }
 }
-
-function extractLandmark(dataUrl) {
+function landmarkFromExif(exifObj) {
   try {
-    const exifObj=piexif.load(dataUrl);
-    const desc = exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.ImageDescription];
-    if (!desc) return null;
-    const m = /REPERE_ID:([A-Za-z0-9-]+)(?:;REPERE_NUM:(\d+))?/.exec(desc);
-    if (!m) return null;
-    return {id:m[1], num: m[2]?parseInt(m[2]):null};
+    const desc=exifObj&&exifObj['0th']&&exifObj['0th'][piexif.ImageIFD.ImageDescription];
+    if(!desc) return null;
+    const m=/REPERE_ID:([A-Za-z0-9-]+)(?:;REPERE_NUM:(\d+))?/.exec(desc);
+    if(!m) return null;
+    return {id:m[1],num:m[2]?parseInt(m[2]):null};
   } catch(e){ return null; }
 }
 
-function dataUrlToBlob(dataUrl) {
-  const [,b64]=dataUrl.split(',');
-  const bin=atob(b64), bytes=new Uint8Array(bin.length);
-  for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-  return new Blob([bytes],{type:'image/jpeg'});
-}
-
-function makeThumb(src, w, h) {
+// ============================================================
+// MINIATURES
+// ============================================================
+function makeThumb(src,w,h) {
   const c=document.createElement('canvas'); c.width=200; c.height=200;
   const ctx=c.getContext('2d');
-  const s=Math.min(w,h), ox=(w-s)/2, oy=(h-s)/2;
+  const s=Math.min(w,h),ox=(w-s)/2,oy=(h-s)/2;
   ctx.drawImage(src,ox,oy,s,s,0,0,200,200);
   return c.toDataURL('image/jpeg',0.7);
 }
+async function makeThumbFromBlob(blob) {
+  if(window.createImageBitmap){
+    try{
+      const bm=await createImageBitmap(blob);
+      try{
+        const w=bm.width,h=bm.height,s=Math.min(w,h),ox=(w-s)/2,oy=(h-s)/2;
+        const c=document.createElement('canvas'); c.width=200; c.height=200;
+        c.getContext('2d').drawImage(bm,ox,oy,s,s,0,0,200,200);
+        return c.toDataURL('image/jpeg',0.7);
+      }finally{ bm.close(); }
+    }catch(e){}
+  }
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{ try{resolve(makeThumb(img,img.naturalWidth,img.naturalHeight));}finally{URL.revokeObjectURL(url);} };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+    img.src=url;
+  });
+}
+
+// ============================================================
+// PRISE DE PHOTO — priorité vitesse, 0 lag, verrou anti-double-appui
+// ============================================================
+let isTakingPhoto = false;
 
 function fileNameFor(ts) {
-  const d=new Date(ts), p=n=>String(n).padStart(2,'0');
-  let base = 'IMG_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
-  // Le numero de repere est ajoute dans le nom uniquement comme repere visuel
-  // pour l'utilisateur (tri/lecture rapide d'un dossier) ; ce n'est jamais
-  // la source de verite du regroupement, qui reste l'UUID en EXIF.
-  if (landmark) base += '_R'+landmark.num;
+  const d=new Date(ts),p=n=>String(n).padStart(2,'0');
+  let base='IMG_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+  if(landmark) base+='_R'+landmark.num;
   return base+'.jpg';
 }
 
+function flashShutter(){
+  const btn=document.getElementById('shutter');
+  btn.classList.add('flash');
+  setTimeout(()=>btn.classList.remove('flash'),120);
+  const fx=document.getElementById('flash-overlay');
+  fx.classList.remove('go'); void fx.offsetWidth; fx.classList.add('go');
+}
+
 async function takePhoto() {
-  if (!stream) return;
-  const video=document.getElementById('video'), canvas=document.getElementById('canvas');
-  canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  let full=canvas.toDataURL('image/jpeg',0.9);
-  if (pos) full=injectGPS(full,pos.lat,pos.lng);
-  const thumb=makeThumb(video,video.videoWidth,video.videoHeight);
-  const ts=new Date().toISOString();
-  const fname=fileNameFor(ts);
-  const photo={
-    id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-    ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
-    thumb, full, fname, source:'app',
-    repere_id: landmark?landmark.id:null, repere_num: landmark?landmark.num:null
-  };
-  photos.unshift(photo);
-  await dbPut(photo);
-  updateGalBadge();
-  checkNearby();
-  if (map) addPhotoMarker(photo);
-  if (dirHandle) {
-    try {
-      await writePhotoToFolder(fname, full);
-      showToast('Photo enregistree + exportee');
-    } catch(e) {
-      showToast('Photo enregistree (export impossible)','var(--amber)');
+  if(!stream||isTakingPhoto) return;
+  isTakingPhoto=true;
+  flashShutter(); // feedback instantané, avant tout traitement
+
+  try {
+    const video=document.getElementById('video'),canvas=document.getElementById('canvas');
+    const vw=video.videoWidth,vh=video.videoHeight;
+    if (!vw || !vh) { showToast('Caméra pas encore prête','var(--amber)'); return; }
+    let sw=vw,sh=vh,sx=0,sy=0;
+    if(vw/vh>CAPTURE_RATIO){sw=vh*CAPTURE_RATIO;sx=(vw-sw)/2;}
+    else{sh=vw/CAPTURE_RATIO;sy=(vh-sh)/2;}
+    canvas.width=sw; canvas.height=sh;
+    canvas.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,sw,sh);
+    const thumb=makeThumb(video,video.videoWidth,video.videoHeight); // synchrone, canvas déjà chaud
+
+    let fullBlob = await canvasToBlob(canvas,'image/jpeg',0.88);
+    if (pos) {
+      // injectGPS travaille sur dataURL ; on ne repasse par là qu'une fois, en évitant l'aller-retour supplémentaire
+      const dataUrl = await blobToDataURL(fullBlob);
+      const withGps = injectGPS(dataUrl, pos.lat, pos.lng);
+      fullBlob = dataUrlToBlob(withGps);
     }
+
+    const ts=new Date().toISOString();
+    const fname=fileNameFor(ts);
+    const id='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+
+    const photo={
+      id, ts, lat:pos?.lat??null, lng:pos?.lng??null, acc:pos?.acc??null,
+      thumb, full:fullBlob, fname, source:'app', exported:false,
+      repere_id:landmark?landmark.id:null, repere_num:landmark?landmark.num:null
+    };
+    const listEntry={...photo}; delete listEntry.full;
+
+    // UI instantanée
+    photos.unshift(listEntry);
+    cacheFile(id, fullBlob);
+    updateGalBadge();
+    checkNearby();
+    if(map) addPhotoMarker(listEntry);
+    renderGalleryIfActive();
+
+    // Persistance + export en arrière-plan, ne bloque jamais l'appareil photo
+    dbPut(photo).catch(err=>{ console.error('dbPut',err); showToast('Erreur sauvegarde locale','var(--red)'); });
+    if(dirHandle) {
+      enqueueExport(photo, listEntry);
+    } else {
+      showToast('Photo enregistrée (aucun dossier choisi)','var(--amber)');
+    }
+  } catch(e) {
+    console.error('takePhoto',e);
+    showToast('Erreur photo','var(--red)');
+  } finally {
+    setTimeout(()=>{ isTakingPhoto=false; }, 180);
+  }
+}
+function blobToDataURL(blob){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=()=>reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+function dataUrlToBlob(dataUrl) {
+  const [meta,b64]=dataUrl.split(',');
+  const bin=atob(b64),bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:'image/jpeg'});
+}
+
+// ============================================================
+// FILE D'EXPORT — écriture séquentielle non-bloquante avec retry
+// ============================================================
+const exportQueue=[];
+let exportRunning=false;
+
+function updateQueueUI(){
+  const sec=document.getElementById('queue-section');
+  const txt=document.getElementById('queue-text');
+  if(exportQueue.length>0 || exportRunning){
+    sec.style.display='flex';
+    txt.textContent=(exportQueue.length+(exportRunning?1:0))+' en attente d\'export';
   } else {
-    showToast('Photo enregistree','var(--amber)');
+    sec.style.display='none';
   }
 }
 
-async function writePhotoToFolder(fname, dataUrl) {
-  const fh=await dirHandle.getFileHandle(fname,{create:true});
-  const w=await fh.createWritable();
-  await w.write(dataUrlToBlob(dataUrl));
-  await w.close();
+function enqueueExport(photo, listEntry){
+  exportQueue.push({photo, listEntry, attempts:0});
+  updateQueueUI();
+  runExportQueue();
 }
 
-function supportsFSAccess() { return 'showDirectoryPicker' in window; }
+async function runExportQueue(){
+  if(exportRunning) return;
+  exportRunning=true;
+  while(exportQueue.length){
+    const job=exportQueue.shift();
+    updateQueueUI();
+    try{
+      const ok=await ensurePermission();
+      if(!ok){
+        showToast('Permission dossier perdue — réautorise dans l\'onglet Dossier','var(--red)');
+        exportQueue.length=0;
+        updateFolderUI();
+        break;
+      }
+      await writeBlobToFolder(job.photo.fname, job.photo.full);
+      job.photo.exported=true;
+      job.listEntry.exported=true;
+      dbPut(job.photo).catch(console.error);
+      showToast('Photo ✓ exportée');
+      renderGalleryIfActive();
+    }catch(e){
+      job.attempts++;
+      if(job.attempts<3){
+        exportQueue.push(job);
+      }else{
+        console.error('export failed', job.photo.fname, e);
+        showToast('Échec export : '+job.photo.fname,'var(--red)');
+      }
+    }
+  }
+  exportRunning=false;
+  updateQueueUI();
+}
+function renderGalleryIfActive(){
+  const galPage=document.getElementById('gal-page');
+  if(galPage.classList.contains('active')) renderGallery();
+}
 
-async function chooseFolder() {
-  if (!supportsFSAccess()){showToast('Non supporte (utilise Chrome)','var(--red)');return;}
-  try {
-    dirHandle=await window.showDirectoryPicker({mode:'readwrite'});
-    await idbSaveHandle(dirHandle);
+// ============================================================
+// DOSSIER — abstraction unique par-dessus 3 backends possibles :
+//   1) File System Access API (Chrome desktop / Android Chrome navigateur)
+//   2) Capacitor Filesystem plugin (APK empaqueté avec Capacitor)
+//   3) Fallback téléchargement (aucun accès dossier persistant : on partage/télécharge chaque photo)
+// ============================================================
+let folderBackend = 'none'; // 'fsaccess' | 'capacitor' | 'none'
+
+function supportsFSAccess(){ return hasFSAccess(); }
+function supportsCapacitorFS(){
+  return !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem);
+}
+// Attend jusqu'à ~2s que window.Capacitor apparaisse (le bridge natif s'injecte
+// parfois juste après le premier paint). Utilisé une seule fois au démarrage
+// pour ne pas afficher à tort "aucun stockage disponible" sur APK.
+function waitForCapacitorBridge(timeoutMs){
+  return new Promise(resolve=>{
+    if (window.Capacitor) return resolve(true);
+    const start=Date.now();
+    const iv=setInterval(()=>{
+      if (window.Capacitor || Date.now()-start>timeoutMs){
+        clearInterval(iv);
+        resolve(!!window.Capacitor);
+      }
+    },100);
+  });
+}
+
+// IMPORTANT : sur APK, "Directory" est un enum du module @capacitor/filesystem
+// importé côté build JS de l'app native ; il n'existe PAS forcément sur
+// window.Capacitor.Plugins (qui n'expose que les méthodes du plugin, pas ses
+// enums). On utilise donc directement les valeurs string documentées par
+// Capacitor (stables dans l'API), ce qui marche que l'enum soit exposé ou non.
+const CAP_DIRECTORY_DOCUMENTS = 'DOCUMENTS';
+const CAP_DIRECTORY_EXTERNAL  = 'EXTERNAL';
+
+async function writeBlobToFolder(fname, blob){
+  if (folderBackend === 'fsaccess') {
+    const fh=await dirHandle.getFileHandle(fname,{create:true});
+    const w=await fh.createWritable();
+    await w.write(blob); await w.close();
+    return;
+  }
+  if (folderBackend === 'capacitor') {
+    if (!supportsCapacitorFS()) throw new Error('Plugin Filesystem indisponible');
+    const { Filesystem } = window.Capacitor.Plugins;
+    const base64 = await blobToBase64(blob);
+    const path = dirHandle.subPath ? (dirHandle.subPath+'/'+fname) : fname;
+    const directory = dirHandle.directory || CAP_DIRECTORY_DOCUMENTS;
+    try{
+      await Filesystem.writeFile({ path, directory, data: base64 });
+    }catch(e){
+      // Sur certains Android, Documents n'est pas accessible sans permission
+      // supplémentaire : on retente une fois sur le stockage externe de l'app.
+      if (directory !== CAP_DIRECTORY_EXTERNAL) {
+        await Filesystem.mkdir({ path: dirHandle.subPath||'ReperesIGN', directory: CAP_DIRECTORY_EXTERNAL, recursive:true }).catch(()=>{});
+        await Filesystem.writeFile({ path, directory: CAP_DIRECTORY_EXTERNAL, data: base64 });
+        dirHandle.directory = CAP_DIRECTORY_EXTERNAL;
+        await idbSaveMeta('capacitorDir', dirHandle);
+      } else {
+        throw e;
+      }
+    }
+    return;
+  }
+  throw new Error('Aucun backend de stockage disponible');
+}
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result).split(',')[1]);
+    r.onerror=()=>reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+function base64ToBlob(base64, mime){
+  const bin=atob(base64);
+  const len=bin.length;
+  const bytes=new Uint8Array(len);
+  for(let i=0;i<len;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:mime||'image/jpeg'});
+}
+// Liste le contenu du dossier Capacitor de façon robuste : selon la version
+// du plugin @capacitor/filesystem, readdir() renvoie soit un tableau de noms
+// (string[]), soit un tableau d'objets FileInfo ({name,type,size,mtime,uri}).
+// On normalise vers {name,size,mtime} en complétant par stat() si besoin.
+async function capacitorReaddir(subPath, directory){
+  const { Filesystem } = window.Capacitor.Plugins;
+  const res=await Filesystem.readdir({ path: subPath, directory });
+  const entries = Array.isArray(res.files) ? res.files : [];
+  const out=[];
+  for(const entry of entries){
+    const isObj = entry && typeof entry === 'object';
+    const name = isObj ? entry.name : entry;
+    if(!name || !/\.(jpe?g)$/i.test(name)) continue;
+    let size = isObj ? entry.size : undefined;
+    let mtime = isObj ? entry.mtime : undefined;
+    if(size==null || mtime==null){
+      try{
+        const st=await Filesystem.stat({ path: subPath+'/'+name, directory });
+        size = size!=null ? size : st.size;
+        mtime = mtime!=null ? mtime : st.mtime;
+      }catch(e){ /* fichier illisible : sera ignoré au moment de la lecture */ }
+    }
+    out.push({ name, size, mtime });
+  }
+  return out;
+}
+
+async function chooseFolder(){
+  if (supportsFSAccess()) {
+    try{
+      dirHandle=await window.showDirectoryPicker({mode:'readwrite'});
+      dirPermGranted=true;
+      folderBackend='fsaccess';
+      await idbSaveHandle(dirHandle);
+      await idbSaveMeta('folderBackend','fsaccess');
+      await idbSaveScanIndex({});
+      updateFolderUI();
+      showToast('Dossier mémorisé de façon permanente');
+    }catch(e){ if(e.name!=='AbortError') showToast('Annulé','var(--muted)'); }
+    return;
+  }
+  if (supportsCapacitorFS()) {
+    const { Filesystem } = window.Capacitor.Plugins;
+    const subPath = 'ReperesIGN';
+    try{
+      await Filesystem.mkdir({ path: subPath, directory: CAP_DIRECTORY_DOCUMENTS, recursive: true });
+      dirHandle = { subPath, name: 'Documents/'+subPath, directory: CAP_DIRECTORY_DOCUMENTS };
+    }catch(e){
+      // Documents indisponible (permissions) : on retombe sur le stockage externe propre à l'app,
+      // qui ne demande aucune permission runtime supplémentaire sur Android moderne.
+      try{
+        await Filesystem.mkdir({ path: subPath, directory: CAP_DIRECTORY_EXTERNAL, recursive: true });
+        dirHandle = { subPath, name: 'Stockage app/'+subPath, directory: CAP_DIRECTORY_EXTERNAL };
+      }catch(e2){
+        console.error('capacitor mkdir',e,e2);
+        showToast('Impossible de créer le dossier : '+(e2.message||e2),'var(--red)');
+        return;
+      }
+    }
+    dirPermGranted = true;
+    folderBackend = 'capacitor';
+    await idbSaveMeta('capacitorDir', dirHandle);
+    await idbSaveMeta('folderBackend','capacitor');
+    await idbSaveScanIndex({});
     updateFolderUI();
-    showToast('Dossier selectionne');
-  } catch(e){ if(e.name!=='AbortError') showToast('Annule','var(--muted)'); }
+    showToast('Dossier "'+dirHandle.name+'" prêt sur l\'appareil');
+    return;
+  }
+  showToast('Aucune sélection de dossier disponible sur cet appareil','var(--red)');
 }
 
+async function ensurePermission(){
+  if (folderBackend==='capacitor') return true; // permission gérée au niveau OS/plugin, pas de re-demande par fichier
+  if(!dirHandle) return false;
+  if(dirPermGranted) return true;
+  let p=await dirHandle.queryPermission({mode:'readwrite'});
+  if(p!=='granted') p=await dirHandle.requestPermission({mode:'readwrite'});
+  dirPermGranted=(p==='granted');
+  return dirPermGranted;
+}
+async function silentlyRefreshPermission(){
+  if(!dirHandle || folderBackend!=='fsaccess') return;
+  try{
+    const p=await dirHandle.queryPermission({mode:'readwrite'});
+    dirPermGranted=(p==='granted');
+    updateFolderUI();
+  }catch(e){}
+}
 document.getElementById('choose-folder-btn').addEventListener('click', chooseFolder);
 
-function updateFolderUI() {
+document.getElementById('export-all-btn').addEventListener('click', exportAllToFolder);
+async function exportAllToFolder(){
+  if(!dirHandle) return;
+  if(!await ensurePermission()){showToast('Permission refusée','var(--red)');return;}
+  const targets=photos.filter(p=>p.source==='app'&&!p.exported);
+  if(!targets.length){showToast('Rien à exporter','var(--amber)');return;}
+  const btn=document.getElementById('export-all-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Export…';
+  let done=0,errors=0;
+  for(const ph of targets){
+    try{
+      const full=await dbGetPhoto(ph.id);
+      if(!full||!(full.full instanceof Blob)){errors++;continue;}
+      await writeBlobToFolder(full.fname,full.full);
+      full.exported=true; await dbPut(full); ph.exported=true; done++;
+    }catch(e){ errors++; }
+  }
+  btn.disabled=false; btn.textContent='⬆️ Exporter les photos non exportées';
+  showToast(done+' exportée(s)'+(errors?', '+errors+' erreur(s)':''),errors?'var(--amber)':'var(--green)');
+  renderGalleryIfActive();
+}
+
+function updateFolderUI(){
   const dot=document.getElementById('folder-dot');
   const name=document.getElementById('folder-name');
   const scanBtn=document.getElementById('scan-btn');
-  if (dirHandle){
-    dot.style.background='var(--green)';
-    name.textContent=dirHandle.name;
-    scanBtn.disabled=false;
+  const exportBtn=document.getElementById('export-all-btn');
+  const warn=document.getElementById('folder-compat-warn');
+  const chooseBtn=document.getElementById('choose-folder-btn');
+
+  if (!supportsFSAccess() && !supportsCapacitorFS()) {
+    warn.style.display='block';
+    warn.textContent='Aucun accès dossier disponible sur cet appareil/navigateur : les photos restent stockées dans l\'app et peuvent être exportées via le partage du système d\'exploitation.';
+    chooseBtn.disabled=true;
   } else {
+    warn.style.display='none';
+    chooseBtn.disabled=false;
+  }
+
+  if(dirHandle){
+    scanBtn.disabled = false; // scan incrémental dispo sur les deux backends (fsaccess ET capacitor)
+    exportBtn.disabled=false;
+    if(dirPermGranted){
+      dot.style.background='var(--green)';
+      name.textContent=dirHandle.name;
+    }else{
+      dot.style.background='var(--amber)';
+      name.textContent=dirHandle.name+' (appuyer sur Scanner pour réautoriser)';
+    }
+  }else{
     dot.style.background='var(--muted)';
     name.textContent='Aucun dossier choisi';
-    scanBtn.disabled=true;
+    scanBtn.disabled=true; exportBtn.disabled=true;
   }
 }
-
-async function restoreFolderHandle() {
-  if (!supportsFSAccess()) return;
-  try {
-    const handle=await idbLoadHandle();
-    if (!handle) return;
-    dirHandle=handle;
-    const perm=await handle.queryPermission({mode:'readwrite'});
-    if (perm==='granted'){
+async function restoreFolderHandle(){
+  const savedBackend = await idbLoadMeta('folderBackend');
+  if (savedBackend === 'capacitor' && supportsCapacitorFS()) {
+    dirHandle = await idbLoadMeta('capacitorDir');
+    if (dirHandle) { dirPermGranted=true; folderBackend='capacitor'; }
+    updateFolderUI();
+    return;
+  }
+  if (savedBackend === 'fsaccess' && supportsFSAccess()) {
+    try{
+      const handle=await idbLoadHandle();
+      if(!handle) return;
+      dirHandle=handle;
+      folderBackend='fsaccess';
+      const perm=await handle.queryPermission({mode:'readwrite'});
+      dirPermGranted=(perm==='granted');
       updateFolderUI();
-    } else {
-      document.getElementById('folder-dot').style.background='var(--amber)';
-      document.getElementById('folder-name').textContent=handle.name+' (Scanner pour reautoriser)';
-      document.getElementById('scan-btn').disabled=false;
-    }
-  } catch(e){ console.warn('restore handle failed',e); }
-}
-
-async function ensurePermission() {
-  if (!dirHandle) return false;
-  let perm=await dirHandle.queryPermission({mode:'readwrite'});
-  if (perm!=='granted') perm=await dirHandle.requestPermission({mode:'readwrite'});
-  return perm==='granted';
-}
-
-function blobToDataURL(blob) {
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(blob);});
-}
-
-async function scanFolder() {
-  if (!dirHandle) return;
-  const ok=await ensurePermission();
-  if (!ok){showToast('Permission refusee','var(--red)');return;}
+    }catch(e){ console.warn('restore handle failed',e); }
+    return;
+  }
   updateFolderUI();
+}
+
+// ============================================================
+// SCAN DOSSIER — incrémental (uniquement backend File System Access)
+// ============================================================
+document.getElementById('scan-btn').addEventListener('click', scanFolder);
+// Dispatcher unique : le scan/import depuis le dossier fonctionne maintenant
+// sur les deux backends (File System Access ET Capacitor/APK), c'est ce qui
+// fait apparaître les photos du dossier dans "Carte" et "Photos".
+async function scanFolder(){
+  if(!dirHandle) return;
+  if(folderBackend==='fsaccess') return scanFolderFsAccess();
+  if(folderBackend==='capacitor') return scanFolderCapacitor();
+}
+async function scanFolderFsAccess(){
+  if(!dirHandle || folderBackend!=='fsaccess') return;
+  const ok=await ensurePermission();
+  if(!ok){showToast('Permission refusée','var(--red)');updateFolderUI();return;}
+  updateFolderUI();
+
   const logEl=document.getElementById('scan-result');
   logEl.style.display='block';
-  let log=['Scan en cours...'];
-  logEl.textContent=log.join('\n');
+  let log=['Scan en cours…'];
+  let logScheduled=false;
+  const flushLog=()=>{ logEl.textContent=log.join('\n'); logEl.scrollTop=logEl.scrollHeight; };
+  const schedLog=()=>{ if(logScheduled)return; logScheduled=true; requestAnimationFrame(()=>{ flushLog(); logScheduled=false; }); };
+  flushLog();
   const scanBtn=document.getElementById('scan-btn');
-  scanBtn.disabled=true;
-  scanBtn.innerHTML='<span class="spin"></span> Scan...';
+  scanBtn.disabled=true; scanBtn.innerHTML='<span class="spin"></span> Scan…';
+
+  const t0=performance.now();
+  const scanIndex = await idbLoadScanIndex();
   const knownNames=new Set(photos.map(p=>p.fname).filter(Boolean));
-  let added=0,skippedNoGps=0,skippedKnown=0,errors=0,total=0;
-  try {
-    for await (const [name,handle] of dirHandle.entries()) {
-      if (handle.kind!=='file') continue;
-      if (!/\.(jpe?g)$/i.test(name)) continue;
+
+  const candidates=[];
+  let total=0, skippedIdentical=0;
+  try{
+    for await(const [name,handle] of dirHandle.entries()){
+      if(handle.kind!=='file') continue;
+      if(!/\.(jpe?g)$/i.test(name)) continue;
       total++;
-      if (knownNames.has(name)){skippedKnown++;continue;}
-      try {
-        const file=await handle.getFile();
-        const dataUrl=await blobToDataURL(file);
-        const gps=extractGPS(dataUrl);
-        if (!gps){skippedNoGps++;log.push('✗ '+name+' - pas de GPS');logEl.textContent=log.join('\n');continue;}
-        const rep=extractLandmark(dataUrl);
-        const thumb=await new Promise(res=>{
-          const img=new Image();
-          img.onload=()=>res(makeThumb(img,img.naturalWidth,img.naturalHeight));
-          img.onerror=()=>res(dataUrl);
-          img.src=dataUrl;
-        });
-        const photo={
-          id:'p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-          ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
-          lat:gps.lat, lng:gps.lng, acc:null,
-          thumb, full:dataUrl, fname:name, source:'import',
-          repere_id: rep?rep.id:null, repere_num: rep?rep.num:null
-        };
-        photos.unshift(photo);
-        await dbPut(photo);
-        knownNames.add(name);
-        added++;
-        log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
-      } catch(e){
-        errors++;
-        log.push('! '+name+' - erreur: '+e.message);
+      const file=await handle.getFile();
+      const prev=scanIndex[name];
+      if(prev && prev.size===file.size && prev.mtime===file.lastModified){
+        skippedIdentical++;
+        continue;
       }
-      logEl.textContent=log.join('\n');
-      logEl.scrollTop=logEl.scrollHeight;
+      candidates.push({name, handle, file});
     }
-  } catch(e){ log.push('Erreur scan: '+e.message); }
+  }catch(e){ log.push('Erreur listing: '+e.message); flushLog(); }
+
+  log.push(total+' fichier(s) .jpg — '+skippedIdentical+' déjà indexé(s) ignoré(s) — '+candidates.length+' à analyser');
+  flushLog();
+
+  let added=0,skippedNoGps=0,errors=0;
+  const newlyAdded=[];
+  await mapLimit(candidates, SCAN_CONCURRENCY, async ({name,handle,file})=>{
+    try{
+      const exifObj=await readExifFromFile(file);
+      const gps=exifObj?gpsFromExif(exifObj):null;
+      scanIndex[name]={size:file.size, mtime:file.lastModified};
+
+      if(!gps){
+        skippedNoGps++;
+        log.push('✗ '+name+' — pas de GPS'); schedLog();
+        return;
+      }
+      if(knownNames.has(name)){
+        schedLog();
+        return;
+      }
+      const rep=exifObj?landmarkFromExif(exifObj):null;
+      const thumb=await makeThumbFromBlob(file);
+      const id='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+      const photo={
+        id,
+        ts:file.lastModified?new Date(file.lastModified).toISOString():new Date().toISOString(),
+        lat:gps.lat, lng:gps.lng, acc:null,
+        thumb, full:file,
+        fname:name, source:'import', exported:true,
+        repere_id:rep?rep.id:null, repere_num:rep?rep.num:null
+      };
+      cacheFile(id, file);
+      const listEntry={...photo}; delete listEntry.full;
+      photos.unshift(listEntry);
+      await dbPut(photo);
+      knownNames.add(name);
+      added++;
+      newlyAdded.push(listEntry);
+      log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
+    }catch(e){ errors++; log.push('! '+name+' — erreur: '+e.message); }
+    schedLog();
+  });
+
+  await idbSaveScanIndex(scanIndex);
+
+  photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   updateGalBadge();
   checkNearby();
-  if (map){map.remove();map=null;initMap();}
+  if(map) newlyAdded.forEach(addPhotoMarker);
+  renderGalleryIfActive();
+
+  const dt=((performance.now()-t0)/1000).toFixed(2);
   log.push('---');
-  log.push('Termine : '+added+' importee(s), '+skippedNoGps+' sans GPS, '+skippedKnown+' deja connue(s), '+errors+' erreur(s) / '+total+' jpg.');
-  logEl.textContent=log.join('\n');
-  logEl.scrollTop=logEl.scrollHeight;
-  scanBtn.disabled=false;
-  scanBtn.innerHTML='Scanner le dossier (importer nouvelles photos)';
-  if (added>0) showToast(added+' photo(s) importee(s) !');
-  else showToast('Aucune nouvelle photo GPS','var(--amber)');
+  log.push('Terminé en '+dt+'s : '+added+' importée(s), '+skippedNoGps+' sans GPS, '+skippedIdentical+' ignorée(s) (index), '+errors+' erreur(s) / '+total+' jpg.');
+  flushLog();
+  scanBtn.disabled=false; scanBtn.innerHTML='🔍 Scanner le dossier (rapide, incrémental)';
+  if(added>0) showToast(added+' photo(s) importée(s) en '+dt+'s !');
+  else showToast('Aucune nouvelle photo ('+dt+'s)','var(--amber)');
 }
 
-document.getElementById('scan-btn').addEventListener('click', scanFolder);
+// Équivalent du scan ci-dessus mais pour le backend Capacitor (APK) : on
+// liste le dossier persistant via le plugin Filesystem, on lit chaque JPEG
+// en base64, on le convertit en Blob pour réutiliser exactement la même
+// logique EXIF/GPS/miniature que le scan File System Access. C'est ce qui
+// manquait pour que les photos du dossier apparaissent en Carte/Photos sur APK.
+async function scanFolderCapacitor(){
+  if(!dirHandle || folderBackend!=='capacitor') return;
+  if(!supportsCapacitorFS()){ showToast('Plugin Filesystem indisponible','var(--red)'); return; }
+  const { Filesystem } = window.Capacitor.Plugins;
+  const subPath = dirHandle.subPath || 'ReperesIGN';
+  const directory = dirHandle.directory || CAP_DIRECTORY_DOCUMENTS;
 
-function renderGallery() {
+  const logEl=document.getElementById('scan-result');
+  logEl.style.display='block';
+  let log=['Scan en cours…'];
+  let logScheduled=false;
+  const flushLog=()=>{ logEl.textContent=log.join('\n'); logEl.scrollTop=logEl.scrollHeight; };
+  const schedLog=()=>{ if(logScheduled)return; logScheduled=true; requestAnimationFrame(()=>{ flushLog(); logScheduled=false; }); };
+  flushLog();
+  const scanBtn=document.getElementById('scan-btn');
+  scanBtn.disabled=true; scanBtn.innerHTML='<span class="spin"></span> Scan…';
+
+  const t0=performance.now();
+  const scanIndex = await idbLoadScanIndex();
+  const knownNames=new Set(photos.map(p=>p.fname).filter(Boolean));
+
+  let entries=[];
+  try{
+    entries=await capacitorReaddir(subPath, directory);
+  }catch(e){ log.push('Erreur listing: '+(e.message||e)); flushLog(); }
+
+  let total=entries.length, skippedIdentical=0;
+  const candidates=[];
+  for(const entry of entries){
+    const prev=scanIndex[entry.name];
+    if(prev && entry.size!=null && entry.mtime!=null && prev.size===entry.size && prev.mtime===entry.mtime){
+      skippedIdentical++;
+      continue;
+    }
+    candidates.push(entry);
+  }
+  log.push(total+' fichier(s) .jpg — '+skippedIdentical+' déjà indexé(s) ignoré(s) — '+candidates.length+' à analyser');
+  flushLog();
+
+  let added=0,skippedNoGps=0,errors=0;
+  const newlyAdded=[];
+  await mapLimit(candidates, SCAN_CONCURRENCY, async ({name,size,mtime})=>{
+    try{
+      const { data }=await Filesystem.readFile({ path: subPath+'/'+name, directory });
+      const blob=base64ToBlob(data,'image/jpeg');
+      const exifObj=await readExifFromFile(blob);
+      const gps=exifObj?gpsFromExif(exifObj):null;
+      scanIndex[name]={size:size!=null?size:blob.size, mtime:mtime!=null?mtime:Date.now()};
+
+      if(!gps){
+        skippedNoGps++;
+        log.push('✗ '+name+' — pas de GPS'); schedLog();
+        return;
+      }
+      if(knownNames.has(name)){
+        schedLog();
+        return;
+      }
+      const rep=exifObj?landmarkFromExif(exifObj):null;
+      const thumb=await makeThumbFromBlob(blob);
+      const id='p_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+      const tsVal=mtime!=null?(typeof mtime==='number'?mtime:Date.parse(mtime)):Date.now();
+      const photo={
+        id,
+        ts:isNaN(tsVal)?new Date().toISOString():new Date(tsVal).toISOString(),
+        lat:gps.lat, lng:gps.lng, acc:null,
+        thumb, full:blob,
+        fname:name, source:'import', exported:true,
+        repere_id:rep?rep.id:null, repere_num:rep?rep.num:null
+      };
+      cacheFile(id, blob);
+      const listEntry={...photo}; delete listEntry.full;
+      photos.unshift(listEntry);
+      await dbPut(photo);
+      knownNames.add(name);
+      added++;
+      newlyAdded.push(listEntry);
+      log.push('✓ '+name+' ('+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5)+')'+(rep?' [repère #'+rep.num+']':''));
+    }catch(e){ errors++; log.push('! '+name+' — erreur: '+(e.message||e)); }
+    schedLog();
+  });
+
+  await idbSaveScanIndex(scanIndex);
+
+  photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  updateGalBadge();
+  checkNearby();
+  if(map) newlyAdded.forEach(addPhotoMarker);
+  renderGalleryIfActive();
+
+  const dt=((performance.now()-t0)/1000).toFixed(2);
+  log.push('---');
+  log.push('Terminé en '+dt+'s : '+added+' importée(s), '+skippedNoGps+' sans GPS, '+skippedIdentical+' ignorée(s) (index), '+errors+' erreur(s) / '+total+' jpg.');
+  flushLog();
+  scanBtn.disabled=false; scanBtn.innerHTML='🔍 Scanner le dossier (rapide, incrémental)';
+  if(added>0) showToast(added+' photo(s) importée(s) en '+dt+'s !');
+  else showToast('Aucune nouvelle photo ('+dt+'s)','var(--amber)');
+}
+
+// ============================================================
+// GALERIE — rendu lazy (IntersectionObserver)
+// ============================================================
+let galObserver = null;
+function renderGallery(){
   document.getElementById('gal-count').textContent=photos.length;
   const gal=document.getElementById('gallery');
-  if (!photos.length){gal.innerHTML='<div class="empty">Aucune photo encore.</div>';return;}
+  if(!photos.length){gal.innerHTML='<div class="empty">Aucune photo encore.</div>';return;}
+
   gal.innerHTML=photos.map(ph=>`
     <div class="gal-item">
-      <img src="${ph.thumb}" alt="photo" data-id="${ph.id}" class="gal-thumb">
+      <img data-src="${ph.thumb}" alt="photo" data-id="${ph.id}" class="gal-thumb" width="70" height="70">
       <div class="gal-meta">
         <b>${new Date(ph.ts).toLocaleString('fr-FR')}</b>
         <p>Lat ${ph.lat!=null?ph.lat.toFixed(6):'-'} / Lng ${ph.lng!=null?ph.lng.toFixed(6):'-'}</p>
-        <p>Precision : ${ph.acc?Math.round(ph.acc)+' m':'-'}</p>
-        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importee':'App'}</span>${ph.repere_num?`<span class="rep-tag">🏷️ #${ph.repere_num}</span>`:''}
+        <p>Précision : ${ph.acc?Math.round(ph.acc)+' m':'-'}</p>
+        <span class="src-tag ${ph.source==='import'?'src-import':'src-app'}">${ph.source==='import'?'Importée':'App'}</span>${ph.repere_num?`<span class="rep-tag">🏷️ #${ph.repere_num}</span>`:''}${ph.source==='app'?`<span class="exp-tag ${ph.exported?'':'pending'}">${ph.exported?'Exportée':'En attente'}</span>`:''}
       </div>
       <button class="del-btn" data-id="${ph.id}" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:4px">✕</button>
     </div>`).join('');
+
+  if(galObserver) galObserver.disconnect();
+  galObserver=new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const img=e.target;
+        if(img.dataset.src){ img.src=img.dataset.src; delete img.dataset.src; }
+        galObserver.unobserve(img);
+      }
+    });
+  },{rootMargin:'200px'});
+  gal.querySelectorAll('img[data-src]').forEach(img=>galObserver.observe(img));
 }
 
-document.getElementById('gallery').addEventListener('click', e => {
+document.getElementById('gallery').addEventListener('click', e=>{
   const thumb=e.target.closest('.gal-thumb');
   const del=e.target.closest('.del-btn');
-  if (thumb&&thumb.dataset.id) openLightbox(thumb.dataset.id);
-  if (del&&del.dataset.id) deletePhoto(del.dataset.id);
+  if(thumb&&thumb.dataset.id) openLightbox(thumb.dataset.id);
+  if(del&&del.dataset.id) deletePhoto(del.dataset.id);
 });
 
-async function deletePhoto(id) {
+async function deletePhoto(id){
   photos=photos.filter(p=>p.id!==id);
+  fileCache.delete(id);
   await dbDelete(id);
-  updateGalBadge();
-  renderGallery();
-  checkNearby();
-  if (map){map.remove();map=null;initMap();}
+  updateGalBadge(); renderGallery(); checkNearby(); removePhotoMarker(id);
 }
 
-async function openLightbox(id) {
-  const ph=await dbGetPhoto(id);
-  if (!ph) return;
-  document.getElementById('lightbox-img').src=ph.full||ph.thumb;
+// ============================================================
+// LIGHTBOX
+// ============================================================
+let lightboxObjectUrl=null;
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('show');
+  if(lightboxObjectUrl){URL.revokeObjectURL(lightboxObjectUrl);lightboxObjectUrl=null;}
+}
+async function openLightbox(id){
+  let src=null;
+  const cached=fileCache.get(id);
+  if(cached){
+    src=URL.createObjectURL(cached);
+    lightboxObjectUrl=src;
+  } else {
+    const ph=await dbGetPhoto(id);
+    if(!ph) return;
+    if(lightboxObjectUrl){URL.revokeObjectURL(lightboxObjectUrl);lightboxObjectUrl=null;}
+    if(ph.full instanceof Blob){
+      src=URL.createObjectURL(ph.full);
+      lightboxObjectUrl=src;
+    } else {
+      src=ph.full||ph.thumb;
+    }
+  }
+  const ph=photos.find(p=>p.id===id)||await dbGetPhoto(id);
+  if(!ph) return;
+  document.getElementById('lightbox-img').src=src;
   document.getElementById('lightbox-meta').innerHTML='<b>'+new Date(ph.ts).toLocaleString('fr-FR')+'</b> Lat '+(ph.lat!=null?ph.lat.toFixed(6):'-')+' / Lng '+(ph.lng!=null?ph.lng.toFixed(6):'-')+(ph.repere_num?' &nbsp;🏷️ Repère #'+ph.repere_num:'');
   document.getElementById('lightbox').classList.add('show');
 }
+document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', function(e){if(e.target===this) closeLightbox();});
 
-document.getElementById('lightbox-close').addEventListener('click', ()=>document.getElementById('lightbox').classList.remove('show'));
-document.getElementById('lightbox').addEventListener('click', function(e){if(e.target===this)this.classList.remove('show');});
-
+// ============================================================
+// CARTE
+// ============================================================
 let userMarker=null, userCircle=null;
+let mapResizeObserver=null;
 
-function initMap() {
-  if (map) return;
-  map=L.map('map',{zoomControl:true}).setView([46.5,2.3],6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19}).addTo(map);
-  photos.forEach(addPhotoMarker);
-  if (pos) updateMapPos();
+function initMap(){
+  if(map){
+    requestAnimationFrame(()=>map.invalidateSize());
+    if(pos) updateMapPos();
+    syncMapMarkers();
+    return;
+  }
+  map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([46.5,2.3],6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OSM',maxZoom:19,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:2
+  }).addTo(map);
+  clusterGroup=L.markerClusterGroup({
+    chunkedLoading:true,chunkInterval:200,chunkDelay:30,
+    spiderfyOnMaxZoom:true,showCoverageOnHover:false,
+    maxClusterRadius:60,disableClusteringAtZoom:18
+  });
+  map.addLayer(clusterGroup);
+  markersById.clear();
+
+  syncMapMarkers();
+  if(pos) updateMapPos();
+
+  const mapEl=document.getElementById('map');
+  if(window.ResizeObserver){
+    mapResizeObserver=new ResizeObserver(()=>{ map.invalidateSize(); });
+    mapResizeObserver.observe(mapEl);
+  }
+  requestAnimationFrame(()=>map.invalidateSize());
+  setTimeout(()=>map.invalidateSize(),150);
 }
-
-function addPhotoMarker(ph) {
-  if (ph.lat==null||ph.lng==null||!map) return;
+function syncMapMarkers(){
+  if(!map||!clusterGroup) return;
+  const toAdd=[];
+  for(const ph of photos){
+    if(ph.lat==null||ph.lng==null) continue;
+    if(markersById.has(ph.id)) continue;
+    const m=buildPhotoMarker(ph);
+    if(m) toAdd.push(m);
+  }
+  if(toAdd.length) clusterGroup.addLayers(toAdd);
+}
+function buildPhotoMarker(ph){
+  if(ph.lat==null||ph.lng==null) return null;
+  if(markersById.has(ph.id)) return null;
   const icon=L.divIcon({
     html:'<img src="'+ph.thumb+'" style="width:44px;height:44px;border-radius:50%;border:3px solid var(--accent);object-fit:cover">',
     className:'',iconSize:[44,44],iconAnchor:[22,22]
   });
-  L.marker([ph.lat,ph.lng],{icon}).addTo(map)
+  const marker=L.marker([ph.lat,ph.lng],{icon})
     .bindPopup('<img src="'+ph.thumb+'" style="width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer" data-id="'+ph.id+'" class="map-popup-img"><br><small>'+new Date(ph.ts).toLocaleString('fr-FR')+(ph.repere_num?' — 🏷️ Repère #'+ph.repere_num:'')+'</small>');
+  markersById.set(ph.id,marker);
+  return marker;
 }
-
-document.getElementById('map').addEventListener('click', e=>{
+function addPhotoMarker(ph){
+  if(!map||!clusterGroup) return;
+  const m=buildPhotoMarker(ph);
+  if(m) clusterGroup.addLayer(m);
+}
+function removePhotoMarker(id){
+  const m=markersById.get(id);
+  if(m&&clusterGroup){clusterGroup.removeLayer(m);markersById.delete(id);}
+}
+document.getElementById('map').addEventListener('click',e=>{
   const img=e.target.closest('.map-popup-img');
-  if (img&&img.dataset.id) openLightbox(img.dataset.id);
+  if(img&&img.dataset.id) openLightbox(img.dataset.id);
 });
-
-function updateMapPos() {
-  if (!map||!pos) return;
-  if (!userMarker){
+function updateMapPos(){
+  if(!map||!pos) return;
+  if(!userMarker){
     userMarker=L.circleMarker([pos.lat,pos.lng],{radius:8,color:'#fff',fillColor:'#3b82f6',fillOpacity:1,weight:2}).addTo(map);
     userCircle=L.circle([pos.lat,pos.lng],{radius:pos.acc,color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:.1,weight:1}).addTo(map);
     map.setView([pos.lat,pos.lng],17);
-  } else {
+  }else{
     userMarker.setLatLng([pos.lat,pos.lng]);
     userCircle.setLatLng([pos.lat,pos.lng]);
     userCircle.setRadius(pos.acc);
   }
 }
 
-async function init() {
-  photos = await dbGetAll();
+// ============================================================
+// ONGLETS
+// ============================================================
+function showPage(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  const page=document.getElementById(p+'-page');
+  if(page) page.classList.add('active');
+  const tab=document.querySelector('.tab[data-page="'+p+'"]');
+  if(tab) tab.classList.add('active');
+  if(p==='map') initMap();
+  if(p==='gal') renderGallery();
+}
+document.getElementById('tab-bar').addEventListener('click', e=>{
+  const tab=e.target.closest('.tab');
+  if(tab&&tab.dataset.page) showPage(tab.dataset.page);
+});
+
+function updateGalBadge(){
+  const el=document.getElementById('tab-gal-count');
+  if(photos.length){el.style.display='inline-block';el.textContent=photos.length;}
+  else el.style.display='none';
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init(){
+  await waitForCapacitorBridge(2000); // laisse le temps au bridge natif de s'injecter avant de juger l'environnement
+  const all=await dbGetAll();
+  photos=all.map(p=>{
+    if(p&&Object.prototype.hasOwnProperty.call(p,'full')){
+      if(p.full instanceof File || (p.full && p.full.size !== undefined && p.source==='import')){
+        try{ cacheFile(p.id, p.full); }catch(e){}
+      }
+      const {full,...rest}=p;
+      return rest;
+    }
+    return p;
+  });
   photos.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   updateGalBadge();
   checkNearby();
